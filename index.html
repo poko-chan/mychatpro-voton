@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- スタイリッシュで未来的なUIを実現するためのCSS読み込み -->
+    <title>voton chat account</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- ログインオーバーレイ：ログインしていない時に表示 -->
+    <div id="login-overlay" class="overlay active">
+        <div class="login-box">
+            <h1>voton chat</h1>
+            <p>次世代のリアルタイムコミュニケーションへようこそ</p>
+            <button id="btn-login-google" class="btn-primary">Googleでログイン</button>
+        </div>
+    </div>
+
+    <!-- アプリのメインコンテナ：2カラム構成（サイドバー ＋ メイン画面） -->
+    <div id="app-container" class="container hidden">
+        
+        <!-- 左側サイドバー：ユーザー情報、モード切替、部屋一覧 -->
+        <aside class="sidebar">
+            <!-- サイドバー上部：ユーザー情報とログアウト -->
+            <div class="sidebar-header">
+                <div class="user-profile">
+                    <img id="my-avatar" src="" alt="アバター" class="avatar">
+                    <div class="user-info">
+                        <div class="user-name-wrapper">
+                            <span id="my-name" class="user-name"></span>
+                            <!-- ユーザー権限（ロール）に応じたバッジを表示する要素 -->
+                            <span id="my-role-badge"></span>
+                        </div>
+                        <span id="my-role-text" class="role-text"></span>
+                    </div>
+                </div>
+                <button id="btn-logout" class="btn-secondary btn-small">ログアウト</button>
+            </div>
+            
+            <!-- チャットモード切替タブメニュー -->
+            <nav class="sidebar-nav">
+                <ul class="tab-menu" id="tab-menu">
+                    <li class="active" data-mode="open">オープンチャット</li>
+                    <li data-mode="dm">DM</li>
+                    <li data-mode="private">プライベート</li>
+                </ul>
+            </nav>
+
+            <!-- 部屋または相手の一覧リスト -->
+            <div class="room-list-container">
+                <ul id="room-list" class="room-list">
+                    <!-- app.js で動的に生成されます -->
+                </ul>
+            </div>
+        </aside>
+
+        <!-- 中央メイン画面：メッセージ履歴と送信フォーム -->
+        <main class="chat-main">
+            <!-- チャットヘッダー：部屋名や通話ボタンなどを配置 -->
+            <header class="chat-header">
+                <div class="room-info">
+                    <h2 id="current-room-name">部屋を選択してください</h2>
+                </div>
+                <div class="chat-actions">
+                    <!-- 音声通話・ビデオ通話ボタン（モック） -->
+                    <button id="btn-audio-call" class="btn-icon" title="音声通話">📞</button>
+                    <button id="btn-video-call" class="btn-icon" title="ビデオ通話">📷</button>
+                    <!-- 管理者のみ表示されるダッシュボードボタン -->
+                    <button id="btn-admin-dashboard" class="btn-primary btn-small hidden">管理者ダッシュボード</button>
+                </div>
+            </header>
+
+            <!-- メッセージ表示エリア：左右に吹き出しが並びます -->
+            <div id="chat-messages" class="messages-area">
+                <!-- メッセージ履歴は app.js によって動的に追加されます -->
+            </div>
+
+            <!-- チャット入力・テスト用フッター -->
+            <footer class="chat-footer">
+                <!-- テスト用機能：自分のロールをリアルタイムで変更するセレクトボックス -->
+                <div class="test-tools">
+                    <label for="test-role-select" class="test-label">【テスト】現在のロール切替:</label>
+                    <select id="test-role-select" class="select-box">
+                        <option value="user">一般 (User)</option>
+                        <option value="official">公式 (Official)</option>
+                        <option value="admin">管理者 (Admin)</option>
+                    </select>
+                </div>
+                <!-- メッセージ送信フォーム -->
+                <form id="chat-form" class="chat-form">
+                    <input type="text" id="chat-input" placeholder="メッセージを入力..." required autocomplete="off">
+                    <button type="submit" id="btn-send" class="btn-primary">送信</button>
+                </form>
+            </footer>
+        </main>
+    </div>
+
+    <!-- 通話機能のモック用モーダル（ポップアップ） -->
+    <div id="call-modal" class="modal hidden">
+        <div class="call-content" id="call-content">
+            <!-- ビデオ通話時に表示されるカメラシミュレーション枠 -->
+            <div id="video-placeholder" class="video-placeholder hidden">
+                <div class="scanning-line"></div>
+                <div class="camera-indicator">● REC</div>
+            </div>
+            <!-- 通話ステータス表示 -->
+            <h3 id="call-status-text">通話中...</h3>
+            <div class="call-controls">
+                <button id="btn-mute" class="btn-icon">🎤</button>
+                <button id="btn-camera-off" class="btn-icon hidden">📷</button>
+                <button id="btn-hangup" class="btn-danger">切断</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 管理者ダッシュボード用モーダル -->
+    <div id="admin-dashboard-modal" class="modal hidden">
+        <div class="dashboard-content">
+            <div class="dashboard-header">
+                <h2>管理者ダッシュボード</h2>
+                <button id="btn-close-dashboard" class="btn-icon">✖</button>
+            </div>
+            <div class="dashboard-body">
+                <h3>ユーザー管理</h3>
+                <div class="table-container">
+                    <table class="user-table">
+                        <thead>
+                            <tr>
+                                <th>アイコン</th>
+                                <th>名前</th>
+                                <th>メールアドレス</th>
+                                <th>権限</th>
+                                <th>アクション</th>
+                            </tr>
+                        </thead>
+                        <tbody id="user-table-body">
+                            <!-- app.js でユーザー一覧を描画します -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- モジュールとしてJavaScriptを読み込む（Firebase v10対応のため type="module" が必須） -->
+    <script type="module" src="app.js"></script>
+</body>
+</html>
