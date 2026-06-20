@@ -30,6 +30,15 @@
     --sidebar-width: 300px;
 }
 
+/* スタイリッシュなライトモード用のテーマ変数（bodyに.light-themeが付与された際に適用） */
+body.light-theme {
+    --bg-color-dark: #f1f5f9;
+    --bg-color-panel: #ffffff;
+    --text-color-main: #0f172a;
+    --text-color-sub: #475569;
+    --border-color: #cbd5e1;
+}
+
 /* 全体のリセットと基本設定 */
 * {
     box-sizing: border-box;
@@ -46,6 +55,7 @@ body {
     align-items: center;
     height: 100vh;
     overflow: hidden;
+    transition: background-color 0.3s, color 0.3s;
 }
 
 /* 隠し要素用クラス */
@@ -112,6 +122,10 @@ button:active {
     background-color: rgba(255, 255, 255, 0.1);
 }
 
+body.light-theme .btn-icon:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
 .btn-delete-msg {
     background: transparent;
     color: var(--danger-color);
@@ -134,11 +148,11 @@ select {
     margin-bottom: 12px;
     border-radius: 6px;
     border: 1px solid var(--border-color);
-    background-color: #0f172a;
+    background-color: var(--bg-color-dark);
     color: var(--text-color-main);
     font-size: 1rem;
     outline: none;
-    transition: border-color 0.2s;
+    transition: border-color 0.2s, background-color 0.3s;
 }
 input[type="text"]:focus, 
 input[type="email"]:focus, 
@@ -170,10 +184,6 @@ select:focus {
     border: 1px solid var(--border-color);
     width: 100%;
     max-width: 450px;
-}
-
-.login-box-large {
-    max-width: 550px;
 }
 
 .login-box h1 {
@@ -267,71 +277,6 @@ select:focus {
     background-color: #357ae8;
 }
 
-.btn-apple {
-    background-color: var(--apple-color);
-    border: 1px solid #333;
-}
-.btn-apple:hover {
-    background-color: #222;
-}
-
-.btn-microsoft {
-    background-color: var(--microsoft-color);
-}
-.btn-microsoft:hover {
-    background-color: #008ad7;
-}
-
-/* セパレーター（または） */
-.separator {
-    display: flex;
-    align-items: center;
-    text-align: center;
-    color: var(--text-color-sub);
-    margin: 20px 0;
-    font-size: 0.85rem;
-}
-
-.separator::before,
-.separator::after {
-    content: '';
-    flex: 1;
-    border-bottom: 1px solid var(--border-color);
-}
-
-.separator:not(:empty)::before {
-    margin-right: .5em;
-}
-
-.separator:not(:empty)::after {
-    margin-left: .5em;
-}
-
-/* 電話番号認証エリア */
-.phone-auth-container h3 {
-    font-size: 1rem;
-    margin-bottom: 12px;
-    color: var(--text-color-main);
-}
-
-.input-group {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 12px;
-}
-
-.input-group input {
-    margin-bottom: 0;
-}
-
-.input-group button {
-    flex-shrink: 0;
-}
-
-#recaptcha-container {
-    margin: 10px 0;
-}
-
 /* フォームのフッターアクション */
 .form-actions {
     display: flex;
@@ -411,6 +356,7 @@ select:focus {
     border-right: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
+    transition: background-color 0.3s, border-color 0.3s;
 }
 
 .sidebar-header {
@@ -421,10 +367,17 @@ select:focus {
     align-items: center;
 }
 
+.sidebar-header-actions {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+}
+
 .user-profile {
     display: flex;
     align-items: center;
     gap: 10px;
+    overflow: hidden;
 }
 
 .avatar {
@@ -438,6 +391,7 @@ select:focus {
 .user-info {
     display: flex;
     flex-direction: column;
+    overflow: hidden;
 }
 
 .user-name-wrapper {
@@ -446,6 +400,9 @@ select:focus {
     gap: 4px;
     font-weight: bold;
     font-size: 1rem;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
 }
 
 .role-text {
@@ -479,10 +436,70 @@ select:focus {
     background-color: rgba(255, 255, 255, 0.05);
 }
 
+body.light-theme .tab-menu li:hover {
+    background-color: rgba(0, 0, 0, 0.03);
+}
+
 .tab-menu li.active {
     color: var(--accent-color);
     border-bottom: 2px solid var(--accent-color);
     font-weight: bold;
+}
+
+/* ユーザー検索エリア（DM用） */
+.dm-search-container {
+    padding: 10px 15px;
+    border-bottom: 1px solid var(--border-color);
+    position: relative;
+}
+
+.dm-search-container input {
+    margin-bottom: 0;
+    padding: 8px 12px;
+    font-size: 0.9rem;
+}
+
+.dm-search-results {
+    list-style: none;
+    position: absolute;
+    top: 100%;
+    left: 15px;
+    right: 15px;
+    background-color: var(--bg-color-panel);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    z-index: 10;
+    max-height: 200px;
+    overflow-y: auto;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.dm-search-results li {
+    padding: 10px 15px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+body.light-theme .dm-search-results li {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.dm-search-results li:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+body.light-theme .dm-search-results li:hover {
+    background-color: rgba(0, 0, 0, 0.03);
+}
+
+.dm-search-results li img {
+    width: 25px;
+    height: 25px;
+    border-radius: 50%;
+    object-fit: cover;
 }
 
 /* 部屋リスト */
@@ -505,8 +522,16 @@ select:focus {
     gap: 10px;
 }
 
+body.light-theme .room-list li {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
 .room-list li:hover {
     background-color: rgba(255, 255, 255, 0.05);
+}
+
+body.light-theme .room-list li:hover {
+    background-color: rgba(0, 0, 0, 0.02);
 }
 
 .room-list li.active {
@@ -522,6 +547,7 @@ select:focus {
     display: flex;
     flex-direction: column;
     position: relative;
+    background-color: var(--bg-color-dark);
 }
 
 .chat-header {
@@ -531,6 +557,7 @@ select:focus {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    transition: background-color 0.3s, border-color 0.3s;
 }
 
 .room-info h2 {
@@ -552,7 +579,8 @@ select:focus {
     display: flex;
     flex-direction: column;
     gap: 15px;
-    background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+    background: radial-gradient(circle at center, var(--bg-color-panel) 0%, var(--bg-color-dark) 100%);
+    transition: background 0.3s;
 }
 
 /* 吹き出しの共通スタイル */
@@ -571,6 +599,7 @@ select:focus {
     background-color: var(--bg-color-panel);
     border: 1px solid var(--border-color);
     border-radius: 12px 12px 12px 0;
+    color: var(--text-color-main);
 }
 
 /* 自分のメッセージ (右側) */
@@ -581,6 +610,7 @@ select:focus {
 .message-wrapper.self .msg-content-box {
     background-color: var(--accent-color);
     border-radius: 12px 12px 0 12px;
+    color: #ffffff;
 }
 .message-wrapper.self .msg-info {
     justify-content: flex-end;
@@ -625,8 +655,9 @@ select:focus {
     padding: 10px 15px;
     line-height: 1.4;
     word-break: break-word;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     position: relative;
+    transition: background-color 0.3s, border-color 0.3s;
 }
 
 .msg-actions {
@@ -638,15 +669,13 @@ select:focus {
 /*=============================================================================
   ロールごとの演出デザイン (Admin, Official, User)
 =============================================================================*/
-/* 管理者 (Admin) の演出 */
 .role-admin .msg-name,
 .role-admin.user-name {
-    /* 深みのある赤とゴールドのグラデーションテキスト */
     background: linear-gradient(45deg, var(--admin-color-start), var(--admin-gold));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     font-weight: 900;
-    text-shadow: 0px 0px 5px rgba(255, 215, 0, 0.3);
+    text-shadow: 0px 0px 5px rgba(255, 215, 0, 0.2);
 }
 
 .badge-admin {
@@ -665,7 +694,6 @@ select:focus {
     100% { filter: drop-shadow(0 0 2px rgba(255, 215, 0, 0.5)); }
 }
 
-/* 公式 (Official) の演出 */
 .badge-official {
     display: inline-flex;
     align-items: center;
@@ -683,8 +711,6 @@ select:focus {
     font-weight: bold;
 }
 
-/* 一般 (User) はバッジなし、通常表示 */
-
 /*=============================================================================
   チャットフッター (入力フォーム等)
 =============================================================================*/
@@ -695,6 +721,7 @@ select:focus {
     display: flex;
     flex-direction: column;
     gap: 10px;
+    transition: background-color 0.3s, border-color 0.3s;
 }
 
 .test-tools {
@@ -703,9 +730,13 @@ select:focus {
     gap: 10px;
     font-size: 0.85rem;
     padding: 8px;
-    background-color: rgba(255,255,255,0.05);
+    background-color: rgba(0, 0, 0, 0.1);
     border-radius: 6px;
     border: 1px dashed var(--border-color);
+}
+
+body.light-theme .test-tools {
+    background-color: rgba(0, 0, 0, 0.02);
 }
 
 .test-label {
@@ -714,6 +745,8 @@ select:focus {
 
 .select-box {
     padding: 4px 8px;
+    margin-bottom: 0;
+    width: auto;
 }
 
 .chat-form {
@@ -723,6 +756,7 @@ select:focus {
 
 #chat-input {
     flex: 1;
+    margin-bottom: 0;
 }
 
 /*=============================================================================
@@ -763,7 +797,6 @@ select:focus {
     border: 2px solid #222;
 }
 
-/* スキャニングラインのCSSアニメーション */
 .scanning-line {
     position: absolute;
     top: 0;
@@ -817,7 +850,7 @@ select:focus {
 }
 
 /*=============================================================================
-  管理者ダッシュボード
+  管理者ダッシュボード & ユーザー設定
 =============================================================================*/
 .dashboard-content {
     background: var(--bg-color-panel);
@@ -830,11 +863,12 @@ select:focus {
     border: 1px solid var(--border-color);
     box-shadow: 0 10px 40px rgba(0,0,0,0.7);
     overflow: hidden;
+    transition: background-color 0.3s, border-color 0.3s;
 }
 
 .dashboard-header {
     padding: 20px;
-    background-color: rgba(0,0,0,0.2);
+    background-color: rgba(0,0,0,0.1);
     border-bottom: 1px solid var(--border-color);
     display: flex;
     justify-content: space-between;
@@ -869,9 +903,13 @@ select:focus {
 }
 
 .user-table th {
-    background-color: rgba(255,255,255,0.05);
+    background-color: rgba(255,255,255,0.02);
     font-weight: bold;
     color: var(--text-color-sub);
+}
+
+body.light-theme .user-table th {
+    background-color: rgba(0,0,0,0.02);
 }
 
 .user-table td img.td-avatar {
@@ -884,9 +922,66 @@ select:focus {
 .user-table td select {
     padding: 5px;
     font-size: 0.9rem;
+    margin-bottom: 0;
 }
 
 .action-buttons {
     display: flex;
     gap: 5px;
+}
+
+/* トグルスイッチのCSS（テーマ設定で使用） */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  height: 24px;
+}
+
+.switch input { 
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: .4s;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  transition: .4s;
+}
+
+input:checked + .slider {
+  background-color: var(--accent-color);
+}
+
+input:focus + .slider {
+  box-shadow: 0 0 1px var(--accent-color);
+}
+
+input:checked + .slider:before {
+  transform: translateX(26px);
+}
+
+.slider.round {
+  border-radius: 24px;
+}
+
+.slider.round:before {
+  border-radius: 50%;
 }

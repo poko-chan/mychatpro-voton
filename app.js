@@ -1,8 +1,8 @@
 /**
  * app.js
  * アプリケーションのすべてのロジックを管理します。
- * ログイン方法はGoogle認証、およびメール/パスワード認証に統一。
- * voton.admin@gmail.comでのログイン時は自動的に管理者ロールが適用されます。
+ * Google認証、メール/パスワード認証、ユーザー設定（アバター/名前編集・テーマ切り替え）、
+ * およびユーザー検索によるDM機能を含みます。
  */
 
 import { 
@@ -48,9 +48,23 @@ const myRoleBadge = document.getElementById('my-role-badge');
 const myRoleText = document.getElementById('my-role-text');
 const btnLogout = document.getElementById('btn-logout');
 
-// サイドバー
+// 設定モーダル関連
+const btnSettingsOpen = document.getElementById('btn-settings-open');
+const settingsModal = document.getElementById('settings-modal');
+const btnSettingsClose = document.getElementById('btn-settings-close');
+const settingsForm = document.getElementById('settings-form');
+const settingsNameInput = document.getElementById('settings-name');
+const settingsPhotoInput = document.getElementById('settings-photo');
+const settingsThemeToggle = document.getElementById('settings-theme-toggle');
+
+// サイドバー・ナビゲーション
 const tabMenuLis = document.querySelectorAll('#tab-menu li');
 const roomList = document.getElementById('room-list');
+
+// DM検索UI関連
+const dmSearchContainer = document.getElementById('dm-search-container');
+const dmSearchInput = document.getElementById('dm-search-input');
+const dmSearchResults = document.getElementById('dm-search-results');
 
 // メインチャット画面
 const currentRoomNameEl = document.getElementById('current-room-name');
@@ -86,17 +100,14 @@ let currentMode = 'open';
 let currentRoomId = 'general'; 
 let currentRoomName = 'General'; 
 let activeListeners = []; 
+let dmsListListener = null; // 自身のDMリスト更新監視用
 
-// モードごとの固定部屋データ
-const roomsData = {
+// モードごとの固定部屋データ（オープンチャットとプライベートチャット）
+const staticRooms = {
     open: [
         { id: 'general', name: '# 総合 (General)' },
         { id: 'random', name: '# 雑談 (Random)' },
         { id: 'announcement', name: '# お知らせ (Announcement)' }
-    ],
-    dm: [
-        { id: 'user1', name: '@ ユーザーA' },
-        { id: 'user2', name: '@ ユーザーB' }
     ],
     private: [
         { id: 'dev-team', name: '🔒 開発チーム' },
@@ -104,8 +115,26 @@ const roomsData = {
     ]
 };
 
+// DMリスト（動的にDBから取得して格納します）
+let activeDms = [];
+
 /*=============================================================================
-  3. ログイン画面の切り替え制御
+  3. テーマ設定の初期化
+=============================================================================*/
+function initTheme() {
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+        document.body.classList.add('light-theme');
+        settingsThemeToggle.checked = true;
+    } else {
+        document.body.classList.remove('light-theme');
+        settingsThemeToggle.checked = false;
+    }
+}
+initTheme();
+
+/*=============================================================================
+  4. ログイン画面の制御と各種認証
 =============================================================================*/
 function showLoginError(message) {
     loginErrorMessage.textContent = message;
@@ -117,6 +146,7 @@ function clearLoginError() {
     loginErrorMessage.classList.add('hidden');
 }
 
+// タブメニューの切り替え
 loginTabs.addEventListener('click', (e) => {
     if (e.target.tagName !== 'LI') return;
     
@@ -144,9 +174,7 @@ btnToggleGuide.addEventListener('click', () => {
     guideBody.classList.toggle('hidden');
 });
 
-/*=============================================================================
-  4. 認証処理の実装 (Google & メール)
-=============================================================================*/
+// エラー日本語変換
 function getErrorMessage(errorCode) {
     switch (errorCode) {
         case 'auth/invalid-email': return 'メールアドレスの形式が正しくありません。';
@@ -162,7 +190,7 @@ function getErrorMessage(errorCode) {
     }
 }
 
-// Google ログイン
+// Googleログイン
 btnLoginGoogle.addEventListener('click', async () => {
     clearLoginError();
     try {
@@ -173,7 +201,7 @@ btnLoginGoogle.addEventListener('click', async () => {
     }
 });
 
-// メールアドレス・パスワードでのログイン
+// メールログイン
 emailLoginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     clearLoginError();
@@ -197,7 +225,6 @@ btnForgotPassword.addEventListener('click', async () => {
         showLoginError('メールアドレスを入力した状態でこのボタンを押してください。');
         return;
     }
-    
     try {
         await sendPasswordResetEmail(auth, email);
         alert('パスワード再設定メールを送信しました。受信トレイをご確認ください。');
@@ -231,7 +258,7 @@ btnLogout.addEventListener('click', async () => {
     try {
         await signOut(auth);
     } catch (error) {
-        console.error('ログアウトエラー:', error);
+        console.error(error);
     }
 });
 
@@ -245,7 +272,7 @@ onAuthStateChanged(auth, async (user) => {
         const userRef = ref(database, `users/${user.uid}`);
         const snapshot = await get(userRef);
         
-        // 管理者メールアドレス(voton.admin@gmail.com)は強制的に「admin」に設定
+        // voton.admin@gmail.comは強制的に管理者 (admin)
         let initialRole = 'user';
         if (user.email === 'voton.admin@gmail.com') {
             initialRole = 'admin';
@@ -263,7 +290,6 @@ onAuthStateChanged(auth, async (user) => {
             currentRole = initialRole;
         } else {
             const userData = snapshot.val();
-            // DBのロールを優先しつつ、voton.admin@gmail.comの場合は常にadminにする
             if (user.email === 'voton.admin@gmail.com') {
                 currentRole = 'admin';
                 if (userData.role !== 'admin') {
@@ -274,33 +300,36 @@ onAuthStateChanged(auth, async (user) => {
             }
         }
         
-        // UIの更新（アプリ画面の表示）
+        // UIの初期化
         loginOverlay.classList.add('hidden');
         appContainer.classList.remove('hidden');
         
-        // プロフィール表示の更新
         myAvatar.src = user.photoURL || 'https://via.placeholder.com/40';
         myName.textContent = user.displayName || user.email?.split('@')[0] || '名無し';
         testRoleSelect.value = currentRole;
         
         updateRoleUI(currentRole);
         
+        // ログイン中のユーザー専用のDMリスト同期を開始
+        startDmsListSync();
+        
         // 初期部屋の読み込み
         renderRoomList(currentMode);
-        switchRoom(roomsData[currentMode][0].id, roomsData[currentMode][0].name);
+        switchRoom(staticRooms.open[0].id, staticRooms.open[0].name);
 
     } else {
         currentUser = null;
         loginOverlay.classList.remove('hidden');
         appContainer.classList.add('hidden');
         adminDashboardModal.classList.add('hidden');
+        settingsModal.classList.add('hidden');
         callModal.classList.add('hidden');
         
+        stopDmsListSync();
         clearDatabaseListeners();
     }
 });
 
-// ロール変更によるUIの更新
 function updateRoleUI(role) {
     currentRole = role;
     
@@ -323,13 +352,71 @@ function updateRoleUI(role) {
     }
 }
 
-// テスト用ロール切替セレクタ
 testRoleSelect.addEventListener('change', (e) => {
     updateRoleUI(e.target.value);
 });
 
 /*=============================================================================
-  6. ナビゲーションと部屋切り替え
+  6. ユーザー設定（プロフィール編集・テーマ切り替え）
+=============================================================================*/
+// 設定モーダルを開く
+btnSettingsOpen.addEventListener('click', () => {
+    if (!currentUser) return;
+    settingsNameInput.value = currentUser.displayName || '';
+    settingsPhotoInput.value = currentUser.photoURL || '';
+    settingsModal.classList.remove('hidden');
+});
+
+// 設定モーダルを閉じる
+btnSettingsClose.addEventListener('click', () => {
+    settingsModal.classList.add('hidden');
+});
+
+// 設定を保存する
+settingsForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!currentUser) return;
+    
+    const newName = settingsNameInput.value.trim();
+    const newPhoto = settingsPhotoInput.value.trim();
+    
+    try {
+        // Firebase Auth の更新
+        await updateProfile(currentUser, {
+            displayName: newName,
+            photoURL: newPhoto || 'https://via.placeholder.com/40'
+        });
+        
+        // Realtime Database の更新
+        const userRef = ref(database, `users/${currentUser.uid}`);
+        await set(ref(database, `users/${currentUser.uid}/displayName`), newName);
+        await set(ref(database, `users/${currentUser.uid}/photoURL`), newPhoto || 'https://via.placeholder.com/40');
+        
+        // サイドバーのUIを即時更新
+        myAvatar.src = newPhoto || 'https://via.placeholder.com/40';
+        myName.textContent = newName;
+        
+        alert('設定を保存しました。');
+        settingsModal.classList.add('hidden');
+    } catch (err) {
+        console.error('設定保存エラー:', err);
+        alert('設定の保存に失敗しました。');
+    }
+});
+
+// テーマ切り替えトグル
+settingsThemeToggle.addEventListener('change', (e) => {
+    if (e.target.checked) {
+        document.body.classList.add('light-theme');
+        localStorage.setItem('theme', 'light');
+    } else {
+        document.body.classList.remove('light-theme');
+        localStorage.setItem('theme', 'dark');
+    }
+});
+
+/*=============================================================================
+  7. ナビゲーションと部屋切り替え（DM検索連携）
 =============================================================================*/
 tabMenuLis.forEach(li => {
     li.addEventListener('click', (e) => {
@@ -337,42 +424,189 @@ tabMenuLis.forEach(li => {
         e.currentTarget.classList.add('active');
         
         currentMode = e.currentTarget.getAttribute('data-mode');
+        
+        // DMモード選択時のみ検索バーを表示
+        if (currentMode === 'dm') {
+            dmSearchContainer.classList.remove('hidden');
+        } else {
+            dmSearchContainer.classList.add('hidden');
+            dmSearchResults.classList.add('hidden');
+            dmSearchInput.value = '';
+        }
+        
         renderRoomList(currentMode);
         
-        if (roomsData[currentMode].length > 0) {
-            const firstRoom = roomsData[currentMode][0];
+        // そのモードの最初の部屋へ切り替え
+        if (currentMode === 'dm') {
+            if (activeDms.length > 0) {
+                switchRoom(activeDms[0].chatId, `@ ${activeDms[0].partnerName}`);
+            } else {
+                currentRoomId = '';
+                currentRoomNameEl.textContent = 'DMを開始するには検索して選択してください';
+                chatMessages.innerHTML = '';
+            }
+        } else {
+            const firstRoom = staticRooms[currentMode][0];
             switchRoom(firstRoom.id, firstRoom.name);
         }
     });
 });
 
+// 部屋リストの描画処理
 function renderRoomList(mode) {
     roomList.innerHTML = '';
-    const rooms = roomsData[mode];
     
-    rooms.forEach(room => {
-        const li = document.createElement('li');
-        li.textContent = room.name;
-        if (room.id === currentRoomId) {
-            li.classList.add('active');
-        }
-        li.addEventListener('click', () => {
-            switchRoom(room.id, room.name);
-            document.querySelectorAll('#room-list li').forEach(el => el.classList.remove('active'));
-            li.classList.add('active');
+    if (mode === 'dm') {
+        // DMリストの描画
+        activeDms.forEach(dm => {
+            const li = document.createElement('li');
+            li.innerHTML = `<img src="${dm.partnerPhoto}" class="msg-avatar" style="width:24px; height:24px;"> @ ${dm.partnerName}`;
+            if (dm.chatId === currentRoomId) {
+                li.classList.add('active');
+            }
+            li.addEventListener('click', () => {
+                switchRoom(dm.chatId, `@ ${dm.partnerName}`);
+                document.querySelectorAll('#room-list li').forEach(el => el.classList.remove('active'));
+                li.classList.add('active');
+            });
+            roomList.appendChild(li);
         });
-        roomList.appendChild(li);
-    });
+    } else {
+        // 静的部屋（オープン、プライベート）の描画
+        const rooms = staticRooms[mode];
+        rooms.forEach(room => {
+            const li = document.createElement('li');
+            li.textContent = room.name;
+            if (room.id === currentRoomId) {
+                li.classList.add('active');
+            }
+            li.addEventListener('click', () => {
+                switchRoom(room.id, room.name);
+                document.querySelectorAll('#room-list li').forEach(el => el.classList.remove('active'));
+                li.classList.add('active');
+            });
+            roomList.appendChild(li);
+        });
+    }
 }
 
 /*=============================================================================
-  7. チャット送受信 & 同期 & 削除
+  8. ユーザー検索によるDMの開始
 =============================================================================*/
-function clearDatabaseListeners() {
-    activeListeners.forEach(unsubscribe => unsubscribe());
-    activeListeners = [];
+// ユーザー検索のイベント処理
+dmSearchInput.addEventListener('input', async (e) => {
+    const query = e.target.value.trim().toLowerCase();
+    dmSearchResults.innerHTML = '';
+    
+    if (!query) {
+        dmSearchResults.classList.add('hidden');
+        return;
+    }
+    
+    try {
+        const usersRef = ref(database, 'users');
+        const snapshot = await get(usersRef);
+        
+        let foundUsers = [];
+        if (snapshot.exists()) {
+            snapshot.forEach(child => {
+                const user = child.val();
+                // 自身を除外し、かつ検索文字列に部分一致するユーザーを検索
+                if (user.uid !== currentUser.uid && user.displayName.toLowerCase().includes(query)) {
+                    foundUsers.push(user);
+                }
+            });
+        }
+        
+        if (foundUsers.length > 0) {
+            foundUsers.forEach(user => {
+                const li = document.createElement('li');
+                li.innerHTML = `<img src="${user.photoURL || 'https://via.placeholder.com/30'}"> <span>${user.displayName}</span>`;
+                
+                li.addEventListener('click', async () => {
+                    await startNewDm(user);
+                    dmSearchInput.value = '';
+                    dmSearchResults.classList.add('hidden');
+                });
+                
+                dmSearchResults.appendChild(li);
+            });
+            dmSearchResults.classList.remove('hidden');
+        } else {
+            const li = document.createElement('li');
+            li.textContent = '見つかりませんでした';
+            dmSearchResults.appendChild(li);
+            dmSearchResults.classList.remove('hidden');
+        }
+    } catch (err) {
+        console.error('ユーザー検索エラー:', err);
+    }
+});
+
+// 新しいDMを開始する処理
+async function startNewDm(partnerUser) {
+    const myUid = currentUser.uid;
+    const partnerUid = partnerUser.uid;
+    
+    // UIDをソートして結合し、ユニークなチャットIDを生成
+    const chatId = myUid < partnerUid ? `${myUid}_${partnerUid}` : `${partnerUid}_${myUid}`;
+    
+    // 自分側のDMリストに登録
+    const myDmRef = ref(database, `users/${myUid}/dms/${chatId}`);
+    await set(myDmRef, {
+        chatId: chatId,
+        partnerUid: partnerUid,
+        partnerName: partnerUser.displayName,
+        partnerPhoto: partnerUser.photoURL || 'https://via.placeholder.com/40',
+        lastUpdated: serverTimestamp()
+    });
+    
+    // 相手側のDMリストに登録
+    const partnerDmRef = ref(database, `users/${partnerUid}/dms/${chatId}`);
+    await set(partnerDmRef, {
+        chatId: chatId,
+        partnerUid: myUid,
+        partnerName: currentUser.displayName || '名無し',
+        partnerPhoto: currentUser.photoURL || 'https://via.placeholder.com/40',
+        lastUpdated: serverTimestamp()
+    });
+    
+    // UIを切り替えてチャットを開く
+    switchRoom(chatId, `@ ${partnerUser.displayName}`);
+    renderRoomList('dm');
 }
 
+// 自身のDMリストの同期を開始する
+function startDmsListSync() {
+    if (!currentUser) return;
+    const dmsRef = ref(database, `users/${currentUser.uid}/dms`);
+    
+    dmsListListener = onValue(dmsRef, (snapshot) => {
+        activeDms = [];
+        if (snapshot.exists()) {
+            snapshot.forEach(child => {
+                activeDms.push(child.val());
+            });
+            // 更新順に並び替え
+            activeDms.sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
+        }
+        // DMモードの時はサイドバー一覧をリアルタイム更新
+        if (currentMode === 'dm') {
+            renderRoomList('dm');
+        }
+    });
+}
+
+function stopDmsListSync() {
+    if (dmsListListener) {
+        dmsListListener();
+        dmsListListener = null;
+    }
+}
+
+/*=============================================================================
+  9. チャットメッセージのリアルタイム同期
+=============================================================================*/
 function switchRoom(roomId, roomName) {
     currentRoomId = roomId;
     currentRoomName = roomName;
@@ -380,6 +614,8 @@ function switchRoom(roomId, roomName) {
     
     chatMessages.innerHTML = '';
     clearDatabaseListeners();
+    
+    if (!roomId) return;
     
     const messagesRef = ref(database, `rooms/${currentMode}/${currentRoomId}/messages`);
     
@@ -404,7 +640,7 @@ function switchRoom(roomId, roomName) {
 chatForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const text = chatInput.value.trim();
-    if (!text || !currentUser) return;
+    if (!text || !currentUser || !currentRoomId) return;
     
     const messagesRef = ref(database, `rooms/${currentMode}/${currentRoomId}/messages`);
     
@@ -421,6 +657,16 @@ chatForm.addEventListener('submit', async (e) => {
         await push(messagesRef, newMessage);
         chatInput.value = '';
         chatInput.focus();
+        
+        // DMの場合は、サイドバーの位置を上げるためにlastUpdatedを更新
+        if (currentMode === 'dm') {
+            const partnerUid = currentRoomId.replace(currentUser.uid, '').replace('_', '');
+            
+            // 自分のDMリストの更新
+            set(ref(database, `users/${currentUser.uid}/dms/${currentRoomId}/lastUpdated`), serverTimestamp());
+            // 相手側のDMリストの更新
+            set(ref(database, `users/${partnerUid}/dms/${currentRoomId}/lastUpdated`), serverTimestamp());
+        }
     } catch (error) {
         console.error('メッセージ送信エラー:', error);
     }
@@ -473,7 +719,6 @@ function renderMessage(msgId, data) {
     contentBox.className = 'msg-content-box';
     contentBox.textContent = data.text;
     
-    // 管理者ロール、または自分が送信したメッセージの場合に削除ボタンを表示
     if (currentRole === 'admin' || isSelf) {
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'btn-delete-msg';
@@ -509,7 +754,7 @@ function scrollToBottom() {
 }
 
 /*=============================================================================
-  8. 通話機能の実装（フロントモック）
+  10. 通話機能の実装（フロントモック）
 =============================================================================*/
 function openCallModal(isVideo) {
     callModal.classList.remove('hidden');
@@ -525,10 +770,12 @@ function openCallModal(isVideo) {
 }
 
 btnAudioCall.addEventListener('click', () => {
+    if (!currentRoomId) return;
     openCallModal(false);
 });
 
 btnVideoCall.addEventListener('click', () => {
+    if (!currentRoomId) return;
     openCallModal(true);
 });
 
@@ -572,7 +819,7 @@ btnHangup.addEventListener('click', () => {
 });
 
 /*=============================================================================
-  9. 管理者ダッシュボード
+  11. 管理者ダッシュボード
 =============================================================================*/
 let dashboardListener = null;
 
@@ -639,7 +886,7 @@ function loadUsersToDashboard() {
                             await set(userRoleRef, newRole);
                             alert('権限を更新しました。');
                         } catch (error) {
-                            console.error('権限変更エラー:', error);
+                            console.error(error);
                             alert('権限の変更に失敗しました。');
                             e.target.value = user.role;
                         }

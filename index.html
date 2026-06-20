@@ -90,7 +90,11 @@
                         <span id="my-role-text" class="role-text"></span>
                     </div>
                 </div>
-                <button id="btn-logout" class="btn-secondary btn-small">ログアウト</button>
+                <div class="sidebar-header-actions">
+                    <!-- 設定を開く歯車ボタン -->
+                    <button id="btn-settings-open" class="btn-icon btn-small" title="ユーザー設定">⚙️</button>
+                    <button id="btn-logout" class="btn-secondary btn-small">ログアウト</button>
+                </div>
             </div>
             
             <!-- チャットモード切替タブメニュー -->
@@ -102,7 +106,14 @@
                 </ul>
             </nav>
 
-            <!-- 部屋一覧リスト -->
+            <!-- ユーザー検索エリア（DMモードの時のみJSで表示） -->
+            <div id="dm-search-container" class="dm-search-container hidden">
+                <input type="text" id="dm-search-input" placeholder="ユーザー名で検索..." autocomplete="off">
+                <!-- 検索候補のドロップダウンリスト -->
+                <ul id="dm-search-results" class="dm-search-results hidden"></ul>
+            </div>
+
+            <!-- 部屋一覧またはDM履歴のリスト -->
             <div class="room-list-container">
                 <ul id="room-list" class="room-list">
                     <!-- app.js で動的に生成 -->
@@ -147,6 +158,36 @@
                 </form>
             </footer>
         </main>
+    </div>
+
+    <!-- ユーザー設定用モーダル -->
+    <div id="settings-modal" class="modal hidden">
+        <div class="settings-content dashboard-content" style="max-width: 450px;">
+            <div class="dashboard-header">
+                <h2>ユーザー設定</h2>
+                <button id="btn-settings-close" class="btn-icon">✖</button>
+            </div>
+            <div class="dashboard-body">
+                <form id="settings-form">
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 5px; font-weight: bold;">表示名</label>
+                        <input type="text" id="settings-name" placeholder="新しい表示名" required>
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 5px; font-weight: bold;">プロフィール画像URL</label>
+                        <input type="text" id="settings-photo" placeholder="アバターの画像URL">
+                    </div>
+                    <div style="margin-bottom: 25px; display: flex; align-items: center; justify-content: space-between;">
+                        <span style="font-weight: bold;">テーマ設定 (ダーク / ライト)</span>
+                        <label class="switch">
+                            <input type="checkbox" id="settings-theme-toggle">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+                    <button type="submit" class="btn-primary btn-full">設定を保存する</button>
+                </form>
+            </div>
+        </div>
     </div>
 
     <!-- 通話機能のモック用モーダル -->
