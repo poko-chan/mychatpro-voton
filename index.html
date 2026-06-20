@@ -10,45 +10,24 @@
 <body>
     <!-- ログインオーバーレイ：ログインしていない時に表示 -->
     <div id="login-overlay" class="overlay active">
-        <div class="login-box login-box-large">
+        <div class="login-box">
             <h1>voton chat</h1>
-            <p>様々なログイン方法に対応した次世代コミュニケーションツール</p>
+            <p>Googleログインまたはメールアドレスでログインしてください</p>
 
             <!-- エラー表示エリア -->
             <div id="login-error-message" class="error-box hidden"></div>
 
             <!-- ログイン方法の切替タブ -->
             <ul class="login-tabs" id="login-tabs">
-                <li class="active" data-tab="social">ソーシャル / 電話</li>
+                <li class="active" data-tab="social">Google</li>
                 <li data-tab="email-login">メールログイン</li>
                 <li data-tab="email-register">新規登録</li>
             </ul>
 
-            <!-- タブ1: ソーシャルログイン / 電話番号ログイン -->
+            <!-- タブ1: Googleログイン -->
             <div id="tab-content-social" class="tab-content">
                 <div class="social-buttons">
                     <button id="btn-login-google" class="btn-social btn-google">Googleでログイン</button>
-                    <button id="btn-login-apple" class="btn-social btn-apple">Appleでログイン</button>
-                    <button id="btn-login-microsoft" class="btn-social btn-microsoft">Microsoftでログイン</button>
-                    <button id="btn-login-admin" class="btn-primary btn-full">👑 管理者アカウントでログイン</button>
-                </div>
-                
-                <div class="separator">または</div>
-
-                <!-- 電話番号ログインフォーム -->
-                <div class="phone-auth-container">
-                    <h3>電話番号（SMS）認証</h3>
-                    <div id="phone-input-group" class="input-group">
-                        <input type="text" id="phone-number" placeholder="+819012345678 (国番号付き)" autocomplete="tel">
-                        <button id="btn-send-sms" class="btn-primary btn-small">認証コード送信</button>
-                    </div>
-                    <!-- reCAPTCHA 表示用の不可視または可視のコンテナ（必須） -->
-                    <div id="recaptcha-container"></div>
-
-                    <div id="sms-code-group" class="input-group hidden">
-                        <input type="text" id="sms-code" placeholder="6桁の認証コードを入力">
-                        <button id="btn-verify-sms" class="btn-primary btn-small">認証コード確認</button>
-                    </div>
                 </div>
             </div>
 
@@ -77,26 +56,24 @@
             <!-- Firebase設定ガイド（アコーディオン） -->
             <div class="config-guide">
                 <div class="guide-header" id="btn-toggle-guide">
-                    <span>🔧 Firebase接続設定・トラブルシューティングガイド</span>
+                    <span>🔧 Firebase接続設定ガイド</span>
                     <span class="arrow">▼</span>
                 </div>
                 <div class="guide-body hidden" id="guide-body">
                     <ol>
                         <li><strong>Authentication の有効化</strong><br>
-                            Firebase Console ＞ Authentication ＞ Sign-in method にて、「メール/パスワード」「Google」「Apple」「Microsoft」「電話」を有効にしてください。</li>
+                            Firebase Console ＞ Authentication ＞ Sign-in method にて、「メール/パスワード」および「Google」を有効にしてください。</li>
                         <li><strong>ドメイン承認の追加</strong><br>
-                            Google/Apple/Microsoft等でログインする際、Vercelのドメイン（例: <code>xxx.vercel.app</code>）を Firebase Console ＞ Authentication ＞ Settings ＞ Authorized domains に追加する必要があります。</li>
-                        <li><strong>Apple / Microsoft ログインのプロバイダ設定</strong><br>
-                            各プロバイダの開発者サイトで作成したクライアントIDとシークレットを、Firebase Console側に登録する必要があります。</li>
-                        <li><strong>電話番号認証（SMS）の設定</strong><br>
-                            SMSの送信にはFirebaseによる課金・クォータが適用される場合があります。テスト時はFirebaseコンソールでテスト用の電話番号とコード（例: <code>+819012345678</code>, <code>123456</code>）を事前に登録しておくと、SMS送信なしでログインテストが可能です。</li>
+                            Googleでログインする際、Vercelのドメイン（例: <code>xxx.vercel.app</code>）を Firebase Console ＞ Settings ＞ Authorized domains に追加する必要があります。</li>
+                        <li><strong>管理者アカウント (voton.admin@gmail.com) ユーザー登録</strong><br>
+                            管理者アカウントは、<strong>「新規登録」タブから <code>voton.admin@gmail.com</code>（パスワード: <code>shibaurafzk</code>）として登録</strong>すると、自動的に「管理者(Admin)」権限が割り当てられ、全ての管理機能が利用可能になります。</li>
                     </ol>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- アプリのメインコンテナ：2カラム構成（サイドバー ＋ メイン画面） -->
+    <!-- アプリのメインコンテナ：2カラム構成 -->
     <div id="app-container" class="container hidden">
         
         <!-- 左側サイドバー：ユーザー情報、モード切替、部屋一覧 -->
@@ -133,7 +110,7 @@
             </div>
         </aside>
 
-        <!-- 中央メイン画面：メッセージ履歴と送信フォーム -->
+        <!-- 中央メイン画面 -->
         <main class="chat-main">
             <header class="chat-header">
                 <div class="room-info">

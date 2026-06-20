@@ -1,11 +1,12 @@
 /**
  * app.js
  * アプリケーションのすべてのロジックを管理します。
- * 各種認証（Google, Apple, Microsoft, メール/パスワード, 電話認証）および管理者自動セットアップロジックを搭載。
+ * ログイン方法はGoogle認証、およびメール/パスワード認証に統一。
+ * voton.admin@gmail.comでのログイン時は自動的に管理者ロールが適用されます。
  */
 
 import { 
-    auth, database, GoogleAuthProvider, OAuthProvider, RecaptchaVerifier, signInWithPhoneNumber,
+    auth, database, GoogleAuthProvider, 
     signInWithPopup, signOut, onAuthStateChanged, sendPasswordResetEmail,
     signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile,
     ref, push, onChildAdded, onChildRemoved, onValue, remove, set, get, serverTimestamp 
@@ -22,18 +23,8 @@ const tabSocial = document.getElementById('tab-content-social');
 const tabEmailLogin = document.getElementById('tab-content-email-login');
 const tabEmailRegister = document.getElementById('tab-content-email-register');
 
-// ログインボタン各種
+// ログインボタン
 const btnLoginGoogle = document.getElementById('btn-login-google');
-const btnLoginApple = document.getElementById('btn-login-apple');
-const btnLoginMicrosoft = document.getElementById('btn-login-microsoft');
-const btnLoginAdmin = document.getElementById('btn-login-admin');
-
-// 電話認証関連
-const phoneInput = document.getElementById('phone-number');
-const btnSendSms = document.getElementById('btn-send-sms');
-const smsCodeGroup = document.getElementById('sms-code-group');
-const smsCodeInput = document.getElementById('sms-code');
-const btnVerifySms = document.getElementById('btn-verify-sms');
 
 // メールフォーム関連
 const emailLoginForm = document.getElementById('email-login-form');
@@ -46,7 +37,7 @@ const registerNameInput = document.getElementById('register-name');
 const registerEmailInput = document.getElementById('register-email');
 const registerPasswordInput = document.getElementById('register-password');
 
-// トラブルシューティングガイド関連
+// 設定ガイド
 const btnToggleGuide = document.getElementById('btn-toggle-guide');
 const guideBody = document.getElementById('guide-body');
 
@@ -95,7 +86,6 @@ let currentMode = 'open';
 let currentRoomId = 'general'; 
 let currentRoomName = 'General'; 
 let activeListeners = []; 
-let confirmationResult = null; // 電話認証の確認オブジェクト用
 
 // モードごとの固定部屋データ
 const roomsData = {
@@ -117,7 +107,6 @@ const roomsData = {
 /*=============================================================================
   3. ログイン画面の切り替え制御
 =============================================================================*/
-// エラー表示処理
 function showLoginError(message) {
     loginErrorMessage.textContent = message;
     loginErrorMessage.classList.remove('hidden');
@@ -128,15 +117,12 @@ function clearLoginError() {
     loginErrorMessage.classList.add('hidden');
 }
 
-// ログインタブのクリック切り替え
 loginTabs.addEventListener('click', (e) => {
     if (e.target.tagName !== 'LI') return;
     
-    // タブのアクティブクラス切り替え
     Array.from(loginTabs.children).forEach(li => li.classList.remove('active'));
     e.target.classList.add('active');
     
-    // コンテンツの表示切り替え
     const targetTab = e.target.getAttribute('data-tab');
     tabSocial.classList.add('hidden');
     tabEmailLogin.classList.add('hidden');
@@ -153,16 +139,14 @@ loginTabs.addEventListener('click', (e) => {
     }
 });
 
-// Firebase設定ガイドの開閉
 btnToggleGuide.addEventListener('click', () => {
     btnToggleGuide.classList.toggle('open');
     guideBody.classList.toggle('hidden');
 });
 
 /*=============================================================================
-  4. 認証プロバイダ各種の実装
+  4. 認証処理の実装 (Google & メール)
 =============================================================================*/
-// エラーコードの日本語化マッピング
 function getErrorMessage(errorCode) {
     switch (errorCode) {
         case 'auth/invalid-email': return 'メールアドレスの形式が正しくありません。';
@@ -173,8 +157,7 @@ function getErrorMessage(errorCode) {
         case 'auth/weak-password': return 'パスワードは6文字以上で設定してください。';
         case 'auth/popup-closed-by-user': return 'ログインポップアップが閉じられました。再度お試しください。';
         case 'auth/unauthorized-domain': return 'このドメインは認証が許可されていません。Firebase設定をご確認ください。';
-        case 'auth/invalid-verification-code': return '認証コードが正しくありません。';
-        case 'auth/code-expired': return '認証コードの期限が切れています。もう一度送信してください。';
+        case 'auth/invalid-credential': return 'ログイン情報が正しくありません。メールアドレスまたはパスワードを確認してください。';
         default: return `ログインエラーが発生しました。 (${errorCode})`;
     }
 }
@@ -185,110 +168,6 @@ btnLoginGoogle.addEventListener('click', async () => {
     try {
         const provider = new GoogleAuthProvider();
         await signInWithPopup(auth, provider);
-    } catch (error) {
-        showLoginError(getErrorMessage(error.code));
-    }
-});
-
-// Apple ログイン
-btnLoginApple.addEventListener('click', async () => {
-    clearLoginError();
-    try {
-        const provider = new OAuthProvider('apple.com');
-        await signInWithPopup(auth, provider);
-    } catch (error) {
-        showLoginError(getErrorMessage(error.code));
-    }
-});
-
-// Microsoft ログイン
-btnLoginMicrosoft.addEventListener('click', async () => {
-    clearLoginError();
-    try {
-        const provider = new OAuthProvider('microsoft.com');
-        await signInWithPopup(auth, provider);
-    } catch (error) {
-        showLoginError(getErrorMessage(error.code));
-    }
-});
-
-// 管理者固定ログイン (voton.admin@gmail.com / shibaurafzk)
-// アカウントが存在しない場合は自動作成し、管理権限を割り当てます
-btnLoginAdmin.addEventListener('click', async () => {
-    clearLoginError();
-    const adminEmail = 'voton.admin@gmail.com';
-    const adminPassword = 'shibaurafzk';
-    
-    try {
-        // まずログインを試行
-        await signInWithEmailAndPassword(auth, adminEmail, adminPassword);
-    } catch (error) {
-        // アカウントが存在しない場合は新規作成
-        if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
-            try {
-                const userCredential = await createUserWithEmailAndPassword(auth, adminEmail, adminPassword);
-                // 表示名を管理者として設定
-                await updateProfile(userCredential.user, { displayName: 'Voton Chat Admin' });
-            } catch (createError) {
-                showLoginError('管理者アカウントの自動作成に失敗しました: ' + getErrorMessage(createError.code));
-            }
-        } else {
-            showLoginError(getErrorMessage(error.code));
-        }
-    }
-});
-
-// 電話番号認証 (SMS)
-// reCAPTCHA認証の設定
-let recaptchaVerifier = null;
-function initRecaptcha() {
-    if (!recaptchaVerifier) {
-        recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-            'size': 'invisible',
-            'callback': (response) => {
-                // reCAPTCHA解決時の処理
-            }
-        });
-    }
-}
-
-// 認証コード送信
-btnSendSms.addEventListener('click', async () => {
-    clearLoginError();
-    const phoneNumber = phoneInput.value.trim();
-    if (!phoneNumber) {
-        showLoginError('電話番号を入力してください。 (例: +819012345678)');
-        return;
-    }
-    
-    try {
-        initRecaptcha();
-        confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier);
-        alert('認証コードをSMS送信しました。');
-        smsCodeGroup.classList.remove('hidden');
-    } catch (error) {
-        showLoginError('SMS送信エラー: ' + getErrorMessage(error.code));
-        if (recaptchaVerifier) {
-            recaptchaVerifier.clear();
-            recaptchaVerifier = null;
-        }
-    }
-});
-
-// 認証コード検証
-btnVerifySms.addEventListener('click', async () => {
-    clearLoginError();
-    const code = smsCodeInput.value.trim();
-    if (!code || !confirmationResult) {
-        showLoginError('認証コードを入力してください。');
-        return;
-    }
-    
-    try {
-        await confirmationResult.confirm(code);
-        smsCodeGroup.classList.add('hidden');
-        phoneInput.value = '';
-        smsCodeInput.value = '';
     } catch (error) {
         showLoginError(getErrorMessage(error.code));
     }
@@ -310,7 +189,7 @@ emailLoginForm.addEventListener('submit', async (e) => {
     }
 });
 
-// パスワードを忘れた場合の処理
+// パスワードリセット
 btnForgotPassword.addEventListener('click', async () => {
     clearLoginError();
     const email = loginEmailInput.value.trim();
@@ -337,15 +216,22 @@ emailRegisterForm.addEventListener('submit', async (e) => {
     
     try {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        // プロフィールの名前を設定
         await updateProfile(userCredential.user, { displayName: name });
         
-        // 入力のリセット
         registerNameInput.value = '';
         registerEmailInput.value = '';
         registerPasswordInput.value = '';
     } catch (error) {
         showLoginError(getErrorMessage(error.code));
+    }
+});
+
+// ログアウト処理
+btnLogout.addEventListener('click', async () => {
+    try {
+        await signOut(auth);
+    } catch (error) {
+        console.error('ログアウトエラー:', error);
     }
 });
 
@@ -356,11 +242,10 @@ onAuthStateChanged(auth, async (user) => {
     if (user) {
         currentUser = user;
         
-        // データベースにユーザー情報を保存（存在しなければ）
         const userRef = ref(database, `users/${user.uid}`);
         const snapshot = await get(userRef);
         
-        // 管理者メールアドレスは強制的に「admin」に設定
+        // 管理者メールアドレス(voton.admin@gmail.com)は強制的に「admin」に設定
         let initialRole = 'user';
         if (user.email === 'voton.admin@gmail.com') {
             initialRole = 'admin';
@@ -369,7 +254,7 @@ onAuthStateChanged(auth, async (user) => {
         if (!snapshot.exists()) {
             await set(userRef, {
                 uid: user.uid,
-                displayName: user.displayName || user.email?.split('@')[0] || user.phoneNumber || '名無し',
+                displayName: user.displayName || user.email?.split('@')[0] || '名無し',
                 email: user.email || '',
                 photoURL: user.photoURL || 'https://via.placeholder.com/40',
                 role: initialRole,
@@ -378,7 +263,7 @@ onAuthStateChanged(auth, async (user) => {
             currentRole = initialRole;
         } else {
             const userData = snapshot.val();
-            // DBのロールを優先しつつ、voton.admin@gmail.comの場合はadminを保証
+            // DBのロールを優先しつつ、voton.admin@gmail.comの場合は常にadminにする
             if (user.email === 'voton.admin@gmail.com') {
                 currentRole = 'admin';
                 if (userData.role !== 'admin') {
@@ -395,7 +280,7 @@ onAuthStateChanged(auth, async (user) => {
         
         // プロフィール表示の更新
         myAvatar.src = user.photoURL || 'https://via.placeholder.com/40';
-        myName.textContent = user.displayName || user.email?.split('@')[0] || user.phoneNumber || '名無し';
+        myName.textContent = user.displayName || user.email?.split('@')[0] || '名無し';
         testRoleSelect.value = currentRole;
         
         updateRoleUI(currentRole);
@@ -525,7 +410,7 @@ chatForm.addEventListener('submit', async (e) => {
     
     const newMessage = {
         uid: currentUser.uid,
-        name: currentUser.displayName || currentUser.email?.split('@')[0] || currentUser.phoneNumber || '名無し',
+        name: currentUser.displayName || currentUser.email?.split('@')[0] || '名無し',
         photoURL: currentUser.photoURL || 'https://via.placeholder.com/40',
         text: text,
         role: currentRole, 
