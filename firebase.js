@@ -1,23 +1,26 @@
 /**
  * firebase.js
- * Firebaseの初期化と各サービス（Auth, Database）のモジュール化を行います。
- * Vercelにそのままデプロイして動作するよう、ビルド不要のCDN経由（v10）でインポートします。
+ * Firebaseの初期化と各種サービス（認証、データベース）の機能提供を行います。
+ * Google, Apple, Microsoft, メール, 電話番号といった各種認証プロバイダに対応するためのオブジェクトをエクスポートします。
  */
 
-// Firebase コア機能のインポート
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 
-// Firebase Authentication（認証）のインポート
 import { 
   getAuth, 
   GoogleAuthProvider, 
+  OAuthProvider,            // Apple, Microsoftなどの外部認証プロバイダ用
+  RecaptchaVerifier,        // 電話認証用のreCAPTCHA認証ツール
+  signInWithPhoneNumber,    // 電話認証（SMS送信・ログイン）用
   signInWithPopup, 
   signOut, 
   onAuthStateChanged,
-  sendPasswordResetEmail
+  sendPasswordResetEmail,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-// Firebase Realtime Database（リアルタイム通信）のインポート
 import { 
   getDatabase, 
   ref, 
@@ -31,7 +34,7 @@ import {
   serverTimestamp 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-// 提供された Firebase 接続情報（Config）
+// 提供された Firebase 接続情報
 const firebaseConfig = {
   apiKey: "AIzaSyC4K9uFm5kOFPFoimNnEGbIh9WcMa6lHGA",
   authDomain: "mychatpro-voton.firebaseapp.com",
@@ -43,22 +46,30 @@ const firebaseConfig = {
   measurementId: "G-SQXWSR704H"
 };
 
-// Firebase アプリの初期化
+// アプリの初期化
 const app = initializeApp(firebaseConfig);
 
-// Auth と Database のインスタンスを取得
+// インスタンスの生成
 const auth = getAuth(app);
 const database = getDatabase(app);
 
-// アプリの他の部分で使用できるようにエクスポート
+// 必要に応じて言語を日本語に設定
+auth.languageCode = 'ja';
+
 export { 
   auth, 
   database, 
   GoogleAuthProvider, 
+  OAuthProvider,
+  RecaptchaVerifier,
+  signInWithPhoneNumber,
   signInWithPopup, 
   signOut, 
   onAuthStateChanged,
   sendPasswordResetEmail,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
   ref, 
   push, 
   onChildAdded, 

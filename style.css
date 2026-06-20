@@ -15,6 +15,11 @@
     --danger-hover: #dc2626;
     --border-color: #334155;
     
+    /* 各種ログインボタンのブランドカラー */
+    --google-color: #4285f4;
+    --apple-color: #000000;
+    --microsoft-color: #00a4ef;
+    
     /* ロールごとの色定義 */
     --admin-color-start: #ff4b2b;
     --admin-color-end: #ff416c;
@@ -56,7 +61,7 @@ button {
     border: none;
     outline: none;
     font-family: inherit;
-    transition: background-color 0.2s, transform 0.1s;
+    transition: background-color 0.2s, transform 0.1s, box-shadow 0.2s;
     border-radius: 6px;
     padding: 10px 20px;
     font-weight: bold;
@@ -93,6 +98,11 @@ button:active {
     font-size: 0.85rem;
 }
 
+.btn-full {
+    width: 100%;
+    margin-top: 10px;
+}
+
 .btn-icon {
     background: transparent;
     font-size: 1.2rem;
@@ -114,16 +124,26 @@ button:active {
     background-color: rgba(239, 68, 68, 0.1);
 }
 
-input[type="text"], select {
-    padding: 10px 15px;
+/* テキスト・パスワード入力フォーム */
+input[type="text"], 
+input[type="email"], 
+input[type="password"], 
+select {
+    width: 100%;
+    padding: 12px 15px;
+    margin-bottom: 12px;
     border-radius: 6px;
     border: 1px solid var(--border-color);
     background-color: #0f172a;
     color: var(--text-color-main);
     font-size: 1rem;
     outline: none;
+    transition: border-color 0.2s;
 }
-input[type="text"]:focus, select:focus {
+input[type="text"]:focus, 
+input[type="email"]:focus, 
+input[type="password"]:focus, 
+select:focus {
     border-color: var(--accent-color);
 }
 
@@ -138,6 +158,7 @@ input[type="text"]:focus, select:focus {
     justify-content: center;
     align-items: center;
     z-index: 1000;
+    overflow-y: auto;
 }
 
 .login-box {
@@ -147,19 +168,227 @@ input[type="text"]:focus, select:focus {
     text-align: center;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
     border: 1px solid var(--border-color);
+    width: 100%;
+    max-width: 450px;
+}
+
+.login-box-large {
+    max-width: 550px;
 }
 
 .login-box h1 {
     margin-bottom: 10px;
-    font-size: 2rem;
+    font-size: 2.2rem;
     background: linear-gradient(to right, #60a5fa, #a78bfa);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
+    font-weight: 800;
 }
 
 .login-box p {
-    margin-bottom: 30px;
+    margin-bottom: 25px;
     color: var(--text-color-sub);
+    font-size: 0.95rem;
+}
+
+/* エラーボックス */
+.error-box {
+    background-color: rgba(239, 68, 68, 0.15);
+    border: 1px solid var(--danger-color);
+    color: #fca5a5;
+    padding: 12px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+    font-size: 0.9rem;
+    text-align: left;
+    line-height: 1.4;
+}
+
+/* ログイン用タブリスト */
+.login-tabs {
+    display: flex;
+    list-style: none;
+    border-bottom: 2px solid var(--border-color);
+    margin-bottom: 25px;
+}
+
+.login-tabs li {
+    flex: 1;
+    padding: 10px 0;
+    cursor: pointer;
+    font-weight: bold;
+    color: var(--text-color-sub);
+    transition: color 0.2s, border-bottom-color 0.2s;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+}
+
+.login-tabs li:hover {
+    color: var(--text-color-main);
+}
+
+.login-tabs li.active {
+    color: var(--accent-color);
+    border-bottom: 2px solid var(--accent-color);
+}
+
+/* タブコンテンツ */
+.tab-content {
+    animation: fadeIn 0.3s ease-in-out;
+    text-align: left;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* ソーシャルボタン */
+.social-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.btn-social {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 12px;
+    font-size: 1rem;
+}
+
+.btn-google {
+    background-color: var(--google-color);
+}
+.btn-google:hover {
+    background-color: #357ae8;
+}
+
+.btn-apple {
+    background-color: var(--apple-color);
+    border: 1px solid #333;
+}
+.btn-apple:hover {
+    background-color: #222;
+}
+
+.btn-microsoft {
+    background-color: var(--microsoft-color);
+}
+.btn-microsoft:hover {
+    background-color: #008ad7;
+}
+
+/* セパレーター（または） */
+.separator {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    color: var(--text-color-sub);
+    margin: 20px 0;
+    font-size: 0.85rem;
+}
+
+.separator::before,
+.separator::after {
+    content: '';
+    flex: 1;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.separator:not(:empty)::before {
+    margin-right: .5em;
+}
+
+.separator:not(:empty)::after {
+    margin-left: .5em;
+}
+
+/* 電話番号認証エリア */
+.phone-auth-container h3 {
+    font-size: 1rem;
+    margin-bottom: 12px;
+    color: var(--text-color-main);
+}
+
+.input-group {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.input-group input {
+    margin-bottom: 0;
+}
+
+.input-group button {
+    flex-shrink: 0;
+}
+
+#recaptcha-container {
+    margin: 10px 0;
+}
+
+/* フォームのフッターアクション */
+.form-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* トラブルシューティングガイド */
+.config-guide {
+    margin-top: 30px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    overflow: hidden;
+    background-color: rgba(0, 0, 0, 0.2);
+}
+
+.guide-header {
+    padding: 12px 15px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85rem;
+    color: var(--text-color-sub);
+    user-select: none;
+    transition: background-color 0.2s;
+}
+
+.guide-header:hover {
+    background-color: rgba(255, 255, 255, 0.03);
+    color: var(--text-color-main);
+}
+
+.guide-header .arrow {
+    font-size: 0.7rem;
+    transition: transform 0.2s;
+}
+
+.guide-header.open .arrow {
+    transform: rotate(180deg);
+}
+
+.guide-body {
+    padding: 15px;
+    border-top: 1px solid var(--border-color);
+    font-size: 0.8rem;
+    color: var(--text-color-sub);
+    line-height: 1.6;
+    text-align: left;
+}
+
+.guide-body ol {
+    margin-left: 20px;
+}
+
+.guide-body li {
+    margin-bottom: 10px;
 }
 
 /*=============================================================================
@@ -534,7 +763,7 @@ input[type="text"]:focus, select:focus {
     border: 2px solid #222;
 }
 
-/* スキャニングラインのCSSアニメーション（ビデオ通話シミュレート） */
+/* スキャニングラインのCSSアニメーション */
 .scanning-line {
     position: absolute;
     top: 0;
@@ -657,7 +886,6 @@ input[type="text"]:focus, select:focus {
     font-size: 0.9rem;
 }
 
-/* ユーザーアクションボタンの配置用 */
 .action-buttons {
     display: flex;
     gap: 5px;

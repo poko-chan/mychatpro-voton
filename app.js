@@ -1,21 +1,54 @@
 /**
  * app.js
- * アプリケーションのすべてのロジック（UI制御、Firebase通信、通話シミュレーション等）を管理します。
- * 全ての処理を省略せずに記述しています。
+ * アプリケーションのすべてのロジックを管理します。
+ * 各種認証（Google, Apple, Microsoft, メール/パスワード, 電話認証）および管理者自動セットアップロジックを搭載。
  */
 
 import { 
-    auth, database, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, sendPasswordResetEmail,
+    auth, database, GoogleAuthProvider, OAuthProvider, RecaptchaVerifier, signInWithPhoneNumber,
+    signInWithPopup, signOut, onAuthStateChanged, sendPasswordResetEmail,
+    signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile,
     ref, push, onChildAdded, onChildRemoved, onValue, remove, set, get, serverTimestamp 
 } from './firebase.js';
 
 /*=============================================================================
   1. DOM要素の取得
 =============================================================================*/
-// ログイン関連
+// ログインUI関連
 const loginOverlay = document.getElementById('login-overlay');
+const loginErrorMessage = document.getElementById('login-error-message');
+const loginTabs = document.getElementById('login-tabs');
+const tabSocial = document.getElementById('tab-content-social');
+const tabEmailLogin = document.getElementById('tab-content-email-login');
+const tabEmailRegister = document.getElementById('tab-content-email-register');
+
+// ログインボタン各種
 const btnLoginGoogle = document.getElementById('btn-login-google');
-const appContainer = document.getElementById('app-container');
+const btnLoginApple = document.getElementById('btn-login-apple');
+const btnLoginMicrosoft = document.getElementById('btn-login-microsoft');
+const btnLoginAdmin = document.getElementById('btn-login-admin');
+
+// 電話認証関連
+const phoneInput = document.getElementById('phone-number');
+const btnSendSms = document.getElementById('btn-send-sms');
+const smsCodeGroup = document.getElementById('sms-code-group');
+const smsCodeInput = document.getElementById('sms-code');
+const btnVerifySms = document.getElementById('btn-verify-sms');
+
+// メールフォーム関連
+const emailLoginForm = document.getElementById('email-login-form');
+const loginEmailInput = document.getElementById('login-email');
+const loginPasswordInput = document.getElementById('login-password');
+const btnForgotPassword = document.getElementById('btn-forgot-password');
+
+const emailRegisterForm = document.getElementById('email-register-form');
+const registerNameInput = document.getElementById('register-name');
+const registerEmailInput = document.getElementById('register-email');
+const registerPasswordInput = document.getElementById('register-password');
+
+// トラブルシューティングガイド関連
+const btnToggleGuide = document.getElementById('btn-toggle-guide');
+const guideBody = document.getElementById('guide-body');
 
 // ユーザープロフィール表示関連
 const myAvatar = document.getElementById('my-avatar');
@@ -24,7 +57,7 @@ const myRoleBadge = document.getElementById('my-role-badge');
 const myRoleText = document.getElementById('my-role-text');
 const btnLogout = document.getElementById('btn-logout');
 
-// サイドバー（モード切替と部屋リスト）
+// サイドバー
 const tabMenuLis = document.querySelectorAll('#tab-menu li');
 const roomList = document.getElementById('room-list');
 
@@ -35,12 +68,12 @@ const btnVideoCall = document.getElementById('btn-video-call');
 const btnAdminDashboard = document.getElementById('btn-admin-dashboard');
 const chatMessages = document.getElementById('chat-messages');
 
-// メッセージ送信フォーム関連
+// メッセージ送信フォーム
 const chatForm = document.getElementById('chat-form');
 const chatInput = document.getElementById('chat-input');
 const testRoleSelect = document.getElementById('test-role-select');
 
-// 通話モーダル関連（フロントモック）
+// 通話モーダル
 const callModal = document.getElementById('call-modal');
 const videoPlaceholder = document.getElementById('video-placeholder');
 const callStatusText = document.getElementById('call-status-text');
@@ -48,7 +81,7 @@ const btnMute = document.getElementById('btn-mute');
 const btnCameraOff = document.getElementById('btn-camera-off');
 const btnHangup = document.getElementById('btn-hangup');
 
-// 管理者ダッシュボード関連
+// 管理者ダッシュボード
 const adminDashboardModal = document.getElementById('admin-dashboard-modal');
 const btnCloseDashboard = document.getElementById('btn-close-dashboard');
 const userTableBody = document.getElementById('user-table-body');
@@ -56,14 +89,15 @@ const userTableBody = document.getElementById('user-table-body');
 /*=============================================================================
   2. 状態管理（State）
 =============================================================================*/
-let currentUser = null; // 現在ログインしているユーザー情報
-let currentRole = 'user'; // 現在の権限 ('user', 'official', 'admin')
-let currentMode = 'open'; // 'open', 'dm', 'private'
-let currentRoomId = 'general'; // 選択中の部屋ID
-let currentRoomName = 'General'; // 選択中の部屋名
-let activeListeners = []; // DBリスナー解除用関数の配列
+let currentUser = null;
+let currentRole = 'user'; 
+let currentMode = 'open'; 
+let currentRoomId = 'general'; 
+let currentRoomName = 'General'; 
+let activeListeners = []; 
+let confirmationResult = null; // 電話認証の確認オブジェクト用
 
-// モードごとの固定部屋データ（本番ではDB管理などをしますが、今回はUI切り替え確認のため静的に用意）
+// モードごとの固定部屋データ
 const roomsData = {
     open: [
         { id: 'general', name: '# 総合 (General)' },
@@ -81,30 +115,243 @@ const roomsData = {
 };
 
 /*=============================================================================
-  3. ログイン・ログアウトとユーザー管理
+  3. ログイン画面の切り替え制御
 =============================================================================*/
-// Googleログイン処理
+// エラー表示処理
+function showLoginError(message) {
+    loginErrorMessage.textContent = message;
+    loginErrorMessage.classList.remove('hidden');
+}
+
+function clearLoginError() {
+    loginErrorMessage.textContent = '';
+    loginErrorMessage.classList.add('hidden');
+}
+
+// ログインタブのクリック切り替え
+loginTabs.addEventListener('click', (e) => {
+    if (e.target.tagName !== 'LI') return;
+    
+    // タブのアクティブクラス切り替え
+    Array.from(loginTabs.children).forEach(li => li.classList.remove('active'));
+    e.target.classList.add('active');
+    
+    // コンテンツの表示切り替え
+    const targetTab = e.target.getAttribute('data-tab');
+    tabSocial.classList.add('hidden');
+    tabEmailLogin.classList.add('hidden');
+    tabEmailRegister.classList.add('hidden');
+    
+    clearLoginError();
+    
+    if (targetTab === 'social') {
+        tabSocial.classList.remove('hidden');
+    } else if (targetTab === 'email-login') {
+        tabEmailLogin.classList.remove('hidden');
+    } else if (targetTab === 'email-register') {
+        tabEmailRegister.classList.remove('hidden');
+    }
+});
+
+// Firebase設定ガイドの開閉
+btnToggleGuide.addEventListener('click', () => {
+    btnToggleGuide.classList.toggle('open');
+    guideBody.classList.toggle('hidden');
+});
+
+/*=============================================================================
+  4. 認証プロバイダ各種の実装
+=============================================================================*/
+// エラーコードの日本語化マッピング
+function getErrorMessage(errorCode) {
+    switch (errorCode) {
+        case 'auth/invalid-email': return 'メールアドレスの形式が正しくありません。';
+        case 'auth/user-disabled': return 'このアカウントは無効化されています。';
+        case 'auth/user-not-found': return 'アカウントが見つかりません。新規登録を行ってください。';
+        case 'auth/wrong-password': return 'パスワードが間違っています。';
+        case 'auth/email-already-in-use': return 'このメールアドレスは既に登録されています。';
+        case 'auth/weak-password': return 'パスワードは6文字以上で設定してください。';
+        case 'auth/popup-closed-by-user': return 'ログインポップアップが閉じられました。再度お試しください。';
+        case 'auth/unauthorized-domain': return 'このドメインは認証が許可されていません。Firebase設定をご確認ください。';
+        case 'auth/invalid-verification-code': return '認証コードが正しくありません。';
+        case 'auth/code-expired': return '認証コードの期限が切れています。もう一度送信してください。';
+        default: return `ログインエラーが発生しました。 (${errorCode})`;
+    }
+}
+
+// Google ログイン
 btnLoginGoogle.addEventListener('click', async () => {
+    clearLoginError();
     try {
         const provider = new GoogleAuthProvider();
         await signInWithPopup(auth, provider);
-        // signInWithPopup成功後、onAuthStateChangedが発火します
     } catch (error) {
-        console.error('ログインエラー:', error);
-        alert('ログインに失敗しました: ' + error.message);
+        showLoginError(getErrorMessage(error.code));
     }
 });
 
-// ログアウト処理
-btnLogout.addEventListener('click', async () => {
+// Apple ログイン
+btnLoginApple.addEventListener('click', async () => {
+    clearLoginError();
     try {
-        await signOut(auth);
+        const provider = new OAuthProvider('apple.com');
+        await signInWithPopup(auth, provider);
     } catch (error) {
-        console.error('ログアウトエラー:', error);
+        showLoginError(getErrorMessage(error.code));
     }
 });
 
-// ログイン状態の監視
+// Microsoft ログイン
+btnLoginMicrosoft.addEventListener('click', async () => {
+    clearLoginError();
+    try {
+        const provider = new OAuthProvider('microsoft.com');
+        await signInWithPopup(auth, provider);
+    } catch (error) {
+        showLoginError(getErrorMessage(error.code));
+    }
+});
+
+// 管理者固定ログイン (voton.admin@gmail.com / shibaurafzk)
+// アカウントが存在しない場合は自動作成し、管理権限を割り当てます
+btnLoginAdmin.addEventListener('click', async () => {
+    clearLoginError();
+    const adminEmail = 'voton.admin@gmail.com';
+    const adminPassword = 'shibaurafzk';
+    
+    try {
+        // まずログインを試行
+        await signInWithEmailAndPassword(auth, adminEmail, adminPassword);
+    } catch (error) {
+        // アカウントが存在しない場合は新規作成
+        if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
+            try {
+                const userCredential = await createUserWithEmailAndPassword(auth, adminEmail, adminPassword);
+                // 表示名を管理者として設定
+                await updateProfile(userCredential.user, { displayName: 'Voton Chat Admin' });
+            } catch (createError) {
+                showLoginError('管理者アカウントの自動作成に失敗しました: ' + getErrorMessage(createError.code));
+            }
+        } else {
+            showLoginError(getErrorMessage(error.code));
+        }
+    }
+});
+
+// 電話番号認証 (SMS)
+// reCAPTCHA認証の設定
+let recaptchaVerifier = null;
+function initRecaptcha() {
+    if (!recaptchaVerifier) {
+        recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+            'size': 'invisible',
+            'callback': (response) => {
+                // reCAPTCHA解決時の処理
+            }
+        });
+    }
+}
+
+// 認証コード送信
+btnSendSms.addEventListener('click', async () => {
+    clearLoginError();
+    const phoneNumber = phoneInput.value.trim();
+    if (!phoneNumber) {
+        showLoginError('電話番号を入力してください。 (例: +819012345678)');
+        return;
+    }
+    
+    try {
+        initRecaptcha();
+        confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier);
+        alert('認証コードをSMS送信しました。');
+        smsCodeGroup.classList.remove('hidden');
+    } catch (error) {
+        showLoginError('SMS送信エラー: ' + getErrorMessage(error.code));
+        if (recaptchaVerifier) {
+            recaptchaVerifier.clear();
+            recaptchaVerifier = null;
+        }
+    }
+});
+
+// 認証コード検証
+btnVerifySms.addEventListener('click', async () => {
+    clearLoginError();
+    const code = smsCodeInput.value.trim();
+    if (!code || !confirmationResult) {
+        showLoginError('認証コードを入力してください。');
+        return;
+    }
+    
+    try {
+        await confirmationResult.confirm(code);
+        smsCodeGroup.classList.add('hidden');
+        phoneInput.value = '';
+        smsCodeInput.value = '';
+    } catch (error) {
+        showLoginError(getErrorMessage(error.code));
+    }
+});
+
+// メールアドレス・パスワードでのログイン
+emailLoginForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    clearLoginError();
+    const email = loginEmailInput.value.trim();
+    const password = loginPasswordInput.value;
+    
+    try {
+        await signInWithEmailAndPassword(auth, email, password);
+        loginEmailInput.value = '';
+        loginPasswordInput.value = '';
+    } catch (error) {
+        showLoginError(getErrorMessage(error.code));
+    }
+});
+
+// パスワードを忘れた場合の処理
+btnForgotPassword.addEventListener('click', async () => {
+    clearLoginError();
+    const email = loginEmailInput.value.trim();
+    if (!email) {
+        showLoginError('メールアドレスを入力した状態でこのボタンを押してください。');
+        return;
+    }
+    
+    try {
+        await sendPasswordResetEmail(auth, email);
+        alert('パスワード再設定メールを送信しました。受信トレイをご確認ください。');
+    } catch (error) {
+        showLoginError(getErrorMessage(error.code));
+    }
+});
+
+// メールアドレスでの新規登録
+emailRegisterForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    clearLoginError();
+    const name = registerNameInput.value.trim();
+    const email = registerEmailInput.value.trim();
+    const password = registerPasswordInput.value;
+    
+    try {
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        // プロフィールの名前を設定
+        await updateProfile(userCredential.user, { displayName: name });
+        
+        // 入力のリセット
+        registerNameInput.value = '';
+        registerEmailInput.value = '';
+        registerPasswordInput.value = '';
+    } catch (error) {
+        showLoginError(getErrorMessage(error.code));
+    }
+});
+
+/*=============================================================================
+  5. ログイン状態の監視とロールUI適用
+=============================================================================*/
 onAuthStateChanged(auth, async (user) => {
     if (user) {
         currentUser = user;
@@ -113,38 +360,43 @@ onAuthStateChanged(auth, async (user) => {
         const userRef = ref(database, `users/${user.uid}`);
         const snapshot = await get(userRef);
         
-        // 初期ロールの設定
-        // 特定のメールアドレスを管理者とする例（あるいはテストで切り替え）
+        // 管理者メールアドレスは強制的に「admin」に設定
         let initialRole = 'user';
-        if (user.email === 'admin@voton.com' || user.email === 'voton@example.com') {
+        if (user.email === 'voton.admin@gmail.com') {
             initialRole = 'admin';
         }
         
         if (!snapshot.exists()) {
-            // 新規ユーザー登録
             await set(userRef, {
                 uid: user.uid,
-                displayName: user.displayName || '名無し',
+                displayName: user.displayName || user.email?.split('@')[0] || user.phoneNumber || '名無し',
                 email: user.email || '',
-                photoURL: user.photoURL || '',
+                photoURL: user.photoURL || 'https://via.placeholder.com/40',
                 role: initialRole,
                 createdAt: serverTimestamp()
             });
             currentRole = initialRole;
         } else {
-            // 既存ユーザーの場合はDBからロールを取得
             const userData = snapshot.val();
-            currentRole = userData.role || 'user';
+            // DBのロールを優先しつつ、voton.admin@gmail.comの場合はadminを保証
+            if (user.email === 'voton.admin@gmail.com') {
+                currentRole = 'admin';
+                if (userData.role !== 'admin') {
+                    await set(ref(database, `users/${user.uid}/role`), 'admin');
+                }
+            } else {
+                currentRole = userData.role || 'user';
+            }
         }
         
-        // UIの更新（ログイン完了）
+        // UIの更新（アプリ画面の表示）
         loginOverlay.classList.add('hidden');
         appContainer.classList.remove('hidden');
         
-        // ユーザー情報をサイドバーに反映
+        // プロフィール表示の更新
         myAvatar.src = user.photoURL || 'https://via.placeholder.com/40';
-        myName.textContent = user.displayName || '名無し';
-        testRoleSelect.value = currentRole; // テスト用セレクタの初期値
+        myName.textContent = user.displayName || user.email?.split('@')[0] || user.phoneNumber || '名無し';
+        testRoleSelect.value = currentRole;
         
         updateRoleUI(currentRole);
         
@@ -153,70 +405,55 @@ onAuthStateChanged(auth, async (user) => {
         switchRoom(roomsData[currentMode][0].id, roomsData[currentMode][0].name);
 
     } else {
-        // 未ログイン状態
         currentUser = null;
         loginOverlay.classList.remove('hidden');
         appContainer.classList.add('hidden');
         adminDashboardModal.classList.add('hidden');
         callModal.classList.add('hidden');
         
-        // リスナーの解除
         clearDatabaseListeners();
     }
 });
 
-// ロールに応じたUIのアップデート
+// ロール変更によるUIの更新
 function updateRoleUI(role) {
     currentRole = role;
     
-    // バッジのリセット
     myRoleBadge.innerHTML = '';
     myRoleBadge.className = '';
     myName.className = 'user-name';
     btnAdminDashboard.classList.add('hidden');
     
     if (role === 'admin') {
-        // 管理者バッジとスタイル
-        myRoleBadge.innerHTML = '🛡️✔️'; // 盾とチェック
+        myRoleBadge.innerHTML = '🛡️✔️';
         myRoleBadge.className = 'badge-admin';
         myName.classList.add('role-admin');
         myRoleText.textContent = 'システム管理者 (Admin)';
-        btnAdminDashboard.classList.remove('hidden'); // 管理者ダッシュボードボタン表示
+        btnAdminDashboard.classList.remove('hidden');
     } else if (role === 'official') {
-        // 公式バッジ
-        myRoleBadge.className = 'badge-official'; // CSSの ::after でチェックを描画
+        myRoleBadge.className = 'badge-official';
         myRoleText.textContent = '公式アカウント (Official)';
     } else {
-        // 一般ユーザー
         myRoleText.textContent = '一般ユーザー (User)';
     }
 }
 
-// テスト用：セレクトボックスでロールを疑似的に切り替える
+// テスト用ロール切替セレクタ
 testRoleSelect.addEventListener('change', (e) => {
     updateRoleUI(e.target.value);
-    
-    // 現在のメッセージ一覧の削除ボタン表示状態も更新（再描画）
-    // 自分が送信したメッセージのうち、adminなら他のメッセージにも削除ボタンをつけるなどをシミュレート
-    // 簡単のため再読み込みはせず、新しく送るメッセージと既存の自身の管理権限が即時変わるようにする
-    // 本来はDBの権限を変更するが、今回はUI上の実験機能
 });
 
 /*=============================================================================
-  4. ナビゲーションと部屋の切り替え
+  6. ナビゲーションと部屋切り替え
 =============================================================================*/
-// タブのクリックイベント
 tabMenuLis.forEach(li => {
     li.addEventListener('click', (e) => {
-        // アクティブ状態の切り替え
         tabMenuLis.forEach(tab => tab.classList.remove('active'));
         e.currentTarget.classList.add('active');
         
-        // モード変更
         currentMode = e.currentTarget.getAttribute('data-mode');
         renderRoomList(currentMode);
         
-        // そのモードの一番上の部屋に切り替え
         if (roomsData[currentMode].length > 0) {
             const firstRoom = roomsData[currentMode][0];
             switchRoom(firstRoom.id, firstRoom.name);
@@ -224,9 +461,8 @@ tabMenuLis.forEach(li => {
     });
 });
 
-// 部屋リストを描画する関数
 function renderRoomList(mode) {
-    roomList.innerHTML = ''; // クリア
+    roomList.innerHTML = '';
     const rooms = roomsData[mode];
     
     rooms.forEach(room => {
@@ -237,7 +473,6 @@ function renderRoomList(mode) {
         }
         li.addEventListener('click', () => {
             switchRoom(room.id, room.name);
-            // 選択状態の更新
             document.querySelectorAll('#room-list li').forEach(el => el.classList.remove('active'));
             li.classList.add('active');
         });
@@ -246,30 +481,23 @@ function renderRoomList(mode) {
 }
 
 /*=============================================================================
-  5. チャット機能（送信・受信・同期・削除）
+  7. チャット送受信 & 同期 & 削除
 =============================================================================*/
-// DBリスナーをすべて解除する関数
 function clearDatabaseListeners() {
     activeListeners.forEach(unsubscribe => unsubscribe());
     activeListeners = [];
 }
 
-// 部屋を切り替えてメッセージを読み込む
 function switchRoom(roomId, roomName) {
     currentRoomId = roomId;
     currentRoomName = roomName;
     currentRoomNameEl.textContent = roomName;
     
-    // メッセージエリアをクリア
     chatMessages.innerHTML = '';
-    
-    // 既存のリスナーを解除
     clearDatabaseListeners();
     
-    // Realtime Database パスを決定
     const messagesRef = ref(database, `rooms/${currentMode}/${currentRoomId}/messages`);
     
-    // メッセージ追加（受信）の監視
     const unsubscribeAdd = onChildAdded(messagesRef, (snapshot) => {
         const msgId = snapshot.key;
         const msgData = snapshot.val();
@@ -278,18 +506,16 @@ function switchRoom(roomId, roomName) {
     });
     activeListeners.push(unsubscribeAdd);
     
-    // メッセージ削除の監視
     const unsubscribeRemove = onChildRemoved(messagesRef, (snapshot) => {
         const msgId = snapshot.key;
         const msgElement = document.getElementById(`msg-${msgId}`);
         if (msgElement) {
-            msgElement.remove(); // UIから即座に削除
+            msgElement.remove();
         }
     });
     activeListeners.push(unsubscribeRemove);
 }
 
-// メッセージ送信処理
 chatForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const text = chatInput.value.trim();
@@ -297,54 +523,45 @@ chatForm.addEventListener('submit', async (e) => {
     
     const messagesRef = ref(database, `rooms/${currentMode}/${currentRoomId}/messages`);
     
-    // DBに保存するデータオブジェクト
     const newMessage = {
         uid: currentUser.uid,
-        name: currentUser.displayName || '名無し',
+        name: currentUser.displayName || currentUser.email?.split('@')[0] || currentUser.phoneNumber || '名無し',
         photoURL: currentUser.photoURL || 'https://via.placeholder.com/40',
         text: text,
-        role: currentRole, // 送信時点のロール（テスト用切り替え対応）
-        timestamp: serverTimestamp() // サーバーのタイムスタンプ
+        role: currentRole, 
+        timestamp: serverTimestamp()
     };
     
     try {
         await push(messagesRef, newMessage);
-        chatInput.value = ''; // フォームクリア
+        chatInput.value = '';
         chatInput.focus();
     } catch (error) {
         console.error('メッセージ送信エラー:', error);
-        alert('メッセージの送信に失敗しました');
     }
 });
 
-// メッセージを画面に描画する関数
 function renderMessage(msgId, data) {
     const isSelf = data.uid === currentUser.uid;
     
-    // 全体を包むラッパー要素
     const wrapper = document.createElement('div');
     wrapper.id = `msg-${msgId}`;
     wrapper.className = `message-wrapper ${isSelf ? 'self' : 'other'}`;
     
-    // アイコン画像
     const avatar = document.createElement('img');
     avatar.src = data.photoURL;
     avatar.className = 'msg-avatar';
     
-    // メッセージ本体のコンテナ
     const body = document.createElement('div');
     body.className = 'msg-body';
     
-    // 送信者情報（名前、バッジ、時間）
     const info = document.createElement('div');
     info.className = 'msg-info';
     
-    // 名前
     const nameSpan = document.createElement('span');
     nameSpan.className = 'msg-name';
     nameSpan.textContent = data.name;
     
-    // 権限バッジの生成と名前の演出
     const badgeSpan = document.createElement('span');
     if (data.role === 'admin') {
         badgeSpan.className = 'badge-admin';
@@ -354,7 +571,6 @@ function renderMessage(msgId, data) {
         badgeSpan.className = 'badge-official';
     }
     
-    // 時間
     const timeSpan = document.createElement('span');
     timeSpan.className = 'msg-time';
     if (data.timestamp) {
@@ -368,27 +584,22 @@ function renderMessage(msgId, data) {
     if (data.role !== 'user') info.appendChild(badgeSpan);
     info.appendChild(timeSpan);
     
-    // メッセージのテキスト内容とアクションボタン
     const contentBox = document.createElement('div');
     contentBox.className = 'msg-content-box';
     contentBox.textContent = data.text;
     
-    // 【管理者機能】メッセージ削除ボタン（自分のメッセージ、または自分が管理者の場合に表示）
+    // 管理者ロール、または自分が送信したメッセージの場合に削除ボタンを表示
     if (currentRole === 'admin' || isSelf) {
-        const actionsDiv = document.createElement('div');
-        actionsDiv.className = 'msg-actions';
-        
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'btn-delete-msg';
         deleteBtn.innerHTML = '🗑️';
         deleteBtn.title = 'メッセージを削除';
         
-        // 削除ロジック
         deleteBtn.addEventListener('click', async () => {
             if (confirm('本当にこのメッセージを削除しますか？')) {
                 const msgRef = ref(database, `rooms/${currentMode}/${currentRoomId}/messages/${msgId}`);
                 try {
-                    await remove(msgRef); // Realtime DBから削除
+                    await remove(msgRef);
                 } catch (error) {
                     console.error('削除エラー:', error);
                     alert('削除権限がありません');
@@ -402,22 +613,19 @@ function renderMessage(msgId, data) {
     body.appendChild(info);
     body.appendChild(contentBox);
     
-    // 要素を組み立てる
     wrapper.appendChild(avatar);
     wrapper.appendChild(body);
     
     chatMessages.appendChild(wrapper);
 }
 
-// 常に最下部へスクロールする関数
 function scrollToBottom() {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
 /*=============================================================================
-  6. 通話機能の実装（フロントモック）
+  8. 通話機能の実装（フロントモック）
 =============================================================================*/
-// 通話モーダルを開く関数
 function openCallModal(isVideo) {
     callModal.classList.remove('hidden');
     callStatusText.textContent = `${currentRoomName} と通話中...`;
@@ -431,17 +639,14 @@ function openCallModal(isVideo) {
     }
 }
 
-// 音声通話ボタン
 btnAudioCall.addEventListener('click', () => {
     openCallModal(false);
 });
 
-// ビデオ通話ボタン
 btnVideoCall.addEventListener('click', () => {
     openCallModal(true);
 });
 
-// マイクミュートトグル
 let isMuted = false;
 btnMute.addEventListener('click', () => {
     isMuted = !isMuted;
@@ -454,14 +659,12 @@ btnMute.addEventListener('click', () => {
     }
 });
 
-// カメラオフトグル
 let isCameraOff = false;
 btnCameraOff.addEventListener('click', () => {
     isCameraOff = !isCameraOff;
     if (isCameraOff) {
         btnCameraOff.innerHTML = '🚫';
         btnCameraOff.style.backgroundColor = 'var(--danger-color)';
-        // カメラ映像を疑似的に黒画面にする
         videoPlaceholder.style.backgroundColor = '#111';
         videoPlaceholder.querySelector('.scanning-line').style.display = 'none';
     } else {
@@ -472,10 +675,8 @@ btnCameraOff.addEventListener('click', () => {
     }
 });
 
-// 通話切断
 btnHangup.addEventListener('click', () => {
     callModal.classList.add('hidden');
-    // 状態リセット
     isMuted = false;
     isCameraOff = false;
     btnMute.innerHTML = '🎤';
@@ -486,32 +687,28 @@ btnHangup.addEventListener('click', () => {
 });
 
 /*=============================================================================
-  7. 管理者ダッシュボード（ユーザー管理機能）
+  9. 管理者ダッシュボード
 =============================================================================*/
 let dashboardListener = null;
 
-// ダッシュボードを開く
 btnAdminDashboard.addEventListener('click', () => {
     adminDashboardModal.classList.remove('hidden');
     loadUsersToDashboard();
 });
 
-// ダッシュボードを閉じる
 btnCloseDashboard.addEventListener('click', () => {
     adminDashboardModal.classList.add('hidden');
     if (dashboardListener) {
-        dashboardListener(); // リスナー解除
+        dashboardListener();
         dashboardListener = null;
     }
 });
 
-// データベースから全ユーザー情報を取得してテーブルに描画
 function loadUsersToDashboard() {
     const usersRef = ref(database, 'users');
     
-    // onValueでリアルタイムにユーザー一覧を同期
     dashboardListener = onValue(usersRef, (snapshot) => {
-        userTableBody.innerHTML = ''; // クリア
+        userTableBody.innerHTML = '';
         
         if (snapshot.exists()) {
             snapshot.forEach((childSnapshot) => {
@@ -520,22 +717,18 @@ function loadUsersToDashboard() {
                 
                 const tr = document.createElement('tr');
                 
-                // アイコン
                 const tdIcon = document.createElement('td');
                 const img = document.createElement('img');
                 img.src = user.photoURL || 'https://via.placeholder.com/30';
                 img.className = 'td-avatar';
                 tdIcon.appendChild(img);
                 
-                // 名前
                 const tdName = document.createElement('td');
                 tdName.textContent = user.displayName || '不明';
                 
-                // メールアドレス
                 const tdEmail = document.createElement('td');
                 tdEmail.textContent = user.email || '未設定';
                 
-                // 権限変更セレクトボックス
                 const tdRole = document.createElement('td');
                 const roleSelect = document.createElement('select');
                 
@@ -553,7 +746,6 @@ function loadUsersToDashboard() {
                     roleSelect.appendChild(option);
                 });
                 
-                // ロール変更イベント
                 roleSelect.addEventListener('change', async (e) => {
                     const newRole = e.target.value;
                     if (confirm(`${user.displayName}の権限を「${newRole}」に変更しますか？`)) {
@@ -564,20 +756,18 @@ function loadUsersToDashboard() {
                         } catch (error) {
                             console.error('権限変更エラー:', error);
                             alert('権限の変更に失敗しました。');
-                            e.target.value = user.role; // 元に戻す
+                            e.target.value = user.role;
                         }
                     } else {
-                        e.target.value = user.role; // キャンセル時は元に戻す
+                        e.target.value = user.role;
                     }
                 });
                 tdRole.appendChild(roleSelect);
                 
-                // アクションボタン類（削除、パスワード変更）
                 const tdActions = document.createElement('td');
                 const actionDiv = document.createElement('div');
                 actionDiv.className = 'action-buttons';
                 
-                // ユーザー削除ボタン
                 const btnDeleteUser = document.createElement('button');
                 btnDeleteUser.className = 'btn-danger btn-small';
                 btnDeleteUser.textContent = '削除';
@@ -586,18 +776,16 @@ function loadUsersToDashboard() {
                         alert('自分自身は削除できません。');
                         return;
                     }
-                    if (confirm(`${user.displayName} をデータベースから完全に削除しますか？\n（Auth側の完全削除にはAdmin SDKが必要ですが、ここではDB上のデータを削除します）`)) {
+                    if (confirm(`${user.displayName} をデータベースから完全に削除しますか？`)) {
                         try {
                             await remove(ref(database, `users/${uid}`));
                             alert('ユーザーデータを削除しました。');
                         } catch (err) {
-                            console.error('ユーザー削除エラー', err);
                             alert('削除に失敗しました。');
                         }
                     }
                 });
                 
-                // パスワード変更（リセットメール送信）ボタン
                 const btnResetPwd = document.createElement('button');
                 btnResetPwd.className = 'btn-secondary btn-small';
                 btnResetPwd.textContent = 'パスワード変更メール';
@@ -611,7 +799,6 @@ function loadUsersToDashboard() {
                             await sendPasswordResetEmail(auth, user.email);
                             alert('パスワードリセットメールを送信しました。');
                         } catch (err) {
-                            console.error('パスワードリセットエラー', err);
                             alert('送信に失敗しました: ' + err.message);
                         }
                     }
@@ -621,7 +808,6 @@ function loadUsersToDashboard() {
                 actionDiv.appendChild(btnDeleteUser);
                 tdActions.appendChild(actionDiv);
                 
-                // 行にセルを追加
                 tr.appendChild(tdIcon);
                 tr.appendChild(tdName);
                 tr.appendChild(tdEmail);
@@ -634,7 +820,6 @@ function loadUsersToDashboard() {
             userTableBody.innerHTML = '<tr><td colspan="5">ユーザーが見つかりません</td></tr>';
         }
     }, (error) => {
-        console.error('ダッシュボードのデータ取得エラー:', error);
-        userTableBody.innerHTML = '<tr><td colspan="5" style="color:red">データの読み込みに失敗しました。権限を確認してください。</td></tr>';
+        console.error(error);
     });
 }

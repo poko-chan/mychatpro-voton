@@ -3,17 +3,96 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- スタイリッシュで未来的なUIを実現するためのCSS読み込み -->
     <title>voton chat account</title>
+    <!-- スタイリッシュで未来的なUIを実現するためのCSS読み込み -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <!-- ログインオーバーレイ：ログインしていない時に表示 -->
     <div id="login-overlay" class="overlay active">
-        <div class="login-box">
+        <div class="login-box login-box-large">
             <h1>voton chat</h1>
-            <p>次世代のリアルタイムコミュニケーションへようこそ</p>
-            <button id="btn-login-google" class="btn-primary">Googleでログイン</button>
+            <p>様々なログイン方法に対応した次世代コミュニケーションツール</p>
+
+            <!-- エラー表示エリア -->
+            <div id="login-error-message" class="error-box hidden"></div>
+
+            <!-- ログイン方法の切替タブ -->
+            <ul class="login-tabs" id="login-tabs">
+                <li class="active" data-tab="social">ソーシャル / 電話</li>
+                <li data-tab="email-login">メールログイン</li>
+                <li data-tab="email-register">新規登録</li>
+            </ul>
+
+            <!-- タブ1: ソーシャルログイン / 電話番号ログイン -->
+            <div id="tab-content-social" class="tab-content">
+                <div class="social-buttons">
+                    <button id="btn-login-google" class="btn-social btn-google">Googleでログイン</button>
+                    <button id="btn-login-apple" class="btn-social btn-apple">Appleでログイン</button>
+                    <button id="btn-login-microsoft" class="btn-social btn-microsoft">Microsoftでログイン</button>
+                    <button id="btn-login-admin" class="btn-primary btn-full">👑 管理者アカウントでログイン</button>
+                </div>
+                
+                <div class="separator">または</div>
+
+                <!-- 電話番号ログインフォーム -->
+                <div class="phone-auth-container">
+                    <h3>電話番号（SMS）認証</h3>
+                    <div id="phone-input-group" class="input-group">
+                        <input type="text" id="phone-number" placeholder="+819012345678 (国番号付き)" autocomplete="tel">
+                        <button id="btn-send-sms" class="btn-primary btn-small">認証コード送信</button>
+                    </div>
+                    <!-- reCAPTCHA 表示用の不可視または可視のコンテナ（必須） -->
+                    <div id="recaptcha-container"></div>
+
+                    <div id="sms-code-group" class="input-group hidden">
+                        <input type="text" id="sms-code" placeholder="6桁の認証コードを入力">
+                        <button id="btn-verify-sms" class="btn-primary btn-small">認証コード確認</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- タブ2: メールログインフォーム -->
+            <div id="tab-content-email-login" class="tab-content hidden">
+                <form id="email-login-form">
+                    <input type="email" id="login-email" placeholder="メールアドレス" required autocomplete="email">
+                    <input type="password" id="login-password" placeholder="パスワード" required autocomplete="current-password">
+                    <div class="form-actions">
+                        <button type="submit" class="btn-primary btn-full">ログイン</button>
+                        <button type="button" id="btn-forgot-password" class="btn-secondary btn-small btn-full">パスワードをお忘れですか？</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- タブ3: メール新規登録フォーム -->
+            <div id="tab-content-email-register" class="tab-content hidden">
+                <form id="email-register-form">
+                    <input type="text" id="register-name" placeholder="表示名 (例: ユーザー名)" required>
+                    <input type="email" id="register-email" placeholder="メールアドレス" required autocomplete="email">
+                    <input type="password" id="register-password" placeholder="パスワード (6文字以上)" required autocomplete="new-password">
+                    <button type="submit" class="btn-primary btn-full">新規登録してログイン</button>
+                </form>
+            </div>
+
+            <!-- Firebase設定ガイド（アコーディオン） -->
+            <div class="config-guide">
+                <div class="guide-header" id="btn-toggle-guide">
+                    <span>🔧 Firebase接続設定・トラブルシューティングガイド</span>
+                    <span class="arrow">▼</span>
+                </div>
+                <div class="guide-body hidden" id="guide-body">
+                    <ol>
+                        <li><strong>Authentication の有効化</strong><br>
+                            Firebase Console ＞ Authentication ＞ Sign-in method にて、「メール/パスワード」「Google」「Apple」「Microsoft」「電話」を有効にしてください。</li>
+                        <li><strong>ドメイン承認の追加</strong><br>
+                            Google/Apple/Microsoft等でログインする際、Vercelのドメイン（例: <code>xxx.vercel.app</code>）を Firebase Console ＞ Authentication ＞ Settings ＞ Authorized domains に追加する必要があります。</li>
+                        <li><strong>Apple / Microsoft ログインのプロバイダ設定</strong><br>
+                            各プロバイダの開発者サイトで作成したクライアントIDとシークレットを、Firebase Console側に登録する必要があります。</li>
+                        <li><strong>電話番号認証（SMS）の設定</strong><br>
+                            SMSの送信にはFirebaseによる課金・クォータが適用される場合があります。テスト時はFirebaseコンソールでテスト用の電話番号とコード（例: <code>+819012345678</code>, <code>123456</code>）を事前に登録しておくと、SMS送信なしでログインテストが可能です。</li>
+                    </ol>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -22,14 +101,13 @@
         
         <!-- 左側サイドバー：ユーザー情報、モード切替、部屋一覧 -->
         <aside class="sidebar">
-            <!-- サイドバー上部：ユーザー情報とログアウト -->
             <div class="sidebar-header">
                 <div class="user-profile">
                     <img id="my-avatar" src="" alt="アバター" class="avatar">
                     <div class="user-info">
                         <div class="user-name-wrapper">
                             <span id="my-name" class="user-name"></span>
-                            <!-- ユーザー権限（ロール）に応じたバッジを表示する要素 -->
+                            <!-- ロールバッジ表示要素 -->
                             <span id="my-role-badge"></span>
                         </div>
                         <span id="my-role-text" class="role-text"></span>
@@ -47,23 +125,21 @@
                 </ul>
             </nav>
 
-            <!-- 部屋または相手の一覧リスト -->
+            <!-- 部屋一覧リスト -->
             <div class="room-list-container">
                 <ul id="room-list" class="room-list">
-                    <!-- app.js で動的に生成されます -->
+                    <!-- app.js で動的に生成 -->
                 </ul>
             </div>
         </aside>
 
         <!-- 中央メイン画面：メッセージ履歴と送信フォーム -->
         <main class="chat-main">
-            <!-- チャットヘッダー：部屋名や通話ボタンなどを配置 -->
             <header class="chat-header">
                 <div class="room-info">
                     <h2 id="current-room-name">部屋を選択してください</h2>
                 </div>
                 <div class="chat-actions">
-                    <!-- 音声通話・ビデオ通話ボタン（モック） -->
                     <button id="btn-audio-call" class="btn-icon" title="音声通話">📞</button>
                     <button id="btn-video-call" class="btn-icon" title="ビデオ通話">📷</button>
                     <!-- 管理者のみ表示されるダッシュボードボタン -->
@@ -71,9 +147,9 @@
                 </div>
             </header>
 
-            <!-- メッセージ表示エリア：左右に吹き出しが並びます -->
+            <!-- メッセージ表示エリア -->
             <div id="chat-messages" class="messages-area">
-                <!-- メッセージ履歴は app.js によって動的に追加されます -->
+                <!-- app.js によって動的に追加 -->
             </div>
 
             <!-- チャット入力・テスト用フッター -->
@@ -96,15 +172,13 @@
         </main>
     </div>
 
-    <!-- 通話機能のモック用モーダル（ポップアップ） -->
+    <!-- 通話機能のモック用モーダル -->
     <div id="call-modal" class="modal hidden">
         <div class="call-content" id="call-content">
-            <!-- ビデオ通話時に表示されるカメラシミュレーション枠 -->
             <div id="video-placeholder" class="video-placeholder hidden">
                 <div class="scanning-line"></div>
                 <div class="camera-indicator">● REC</div>
             </div>
-            <!-- 通話ステータス表示 -->
             <h3 id="call-status-text">通話中...</h3>
             <div class="call-controls">
                 <button id="btn-mute" class="btn-icon">🎤</button>
@@ -135,7 +209,7 @@
                             </tr>
                         </thead>
                         <tbody id="user-table-body">
-                            <!-- app.js でユーザー一覧を描画します -->
+                            <!-- app.js でユーザー一覧を描画 -->
                         </tbody>
                     </table>
                 </div>
@@ -143,7 +217,7 @@
         </div>
     </div>
 
-    <!-- モジュールとしてJavaScriptを読み込む（Firebase v10対応のため type="module" が必須） -->
+    <!-- JavaScript の読み込み -->
     <script type="module" src="app.js"></script>
 </body>
 </html>
